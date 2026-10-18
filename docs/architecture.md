@@ -1,15 +1,17 @@
 # Arquitectura de openfront-rl
 
-> Estado: **borrador inicial (Fase 0)**. Las partes marcadas con ⚠️ dependen de la investigación del motor y se confirmarán con ADRs.
+> Estado: **Fase 0 completada** (ver `docs/research/engine-findings.md`). Lo marcado con ⚠️ sigue siendo propuesta o está sin medir; los ADRs 0002–0004 están en estado "propuesta" hasta validarse en la Fase 1.
+>
+> Resumen de la Fase 0: el motor corre sin navegador a ~190–490 ticks/s por proceso (el juego real va a 10), es determinista (mismo hash con la misma semilla) y acepta 25 tipos de intents. Requiere Node 24.15+ y npm 12.1+.
 
 ## 1. Visión general
 
 ```mermaid
 flowchart LR
   subgraph Node["Node.js (TypeScript)"]
-    E["Motor OpenFront headless<br/>(vendor/openfront)"] --> B["Bridge<br/>estado ⇄ acciones"]
+    E["GameRunner headless<br/>(vendor/openfront)"] --> B["Bridge<br/>estado ⇄ intents"]
   end
-  B <-->|"⚠️ IPC / sockets"| G["Python: Gym env<br/>+ action masking"]
+  B <-->|"⚠️ stdio/sockets binarios<br/>(ADR 0002, por medir)"| G["Python: Gym env<br/>+ action masking"]
   G --> T["Trainer PPO<br/>+ self-play"]
   T --> C[("Checkpoints")]
   C --> L["Liga de oponentes"]
@@ -27,9 +29,9 @@ sequenceDiagram
   participant E as Motor OpenFront
   T->>G: step(acción)
   G->>B: acción (máscara validada)
-  B->>E: intent(s) del jugador
-  E-->>B: tick(s) simulados
-  B-->>G: observación + eventos
+  B->>E: addTurn({intents}) por GameRunner
+  E-->>B: executeNextTick() x N ticks
+  B-->>G: observación reducida + eventos
   G-->>T: obs, recompensa, terminated, truncated, info
 ```
 
@@ -37,20 +39,20 @@ sequenceDiagram
 
 | Componente | Lenguaje | Responsabilidad | Spec |
 |---|---|---|---|
-| Motor | TS | Simulación (no se toca) | n/a |
-| Bridge | TS | Headless, serializar estado, aplicar acciones | ⚠️ pendiente |
+| Motor | TS | Simulación (no se toca). Se usa `GameRunner` como librería (ADR 0003) | n/a |
+| Bridge | TS | Armar la partida, aplicar intents, construir observaciones reducidas | ⚠️ pendiente (Fase 1) |
 | Gym env | Python | Observaciones, acciones, máscaras, recompensa | `specs/observations.md`, `specs/actions.md`, `specs/reward.md` |
 | Trainer | Python | PPO, rollouts paralelos, checkpoints | ⚠️ pendiente |
 | Liga | Python | Gestión de oponentes para self-play | ⚠️ pendiente |
 
 ## 4. Puntos de decisión abiertos (ADRs)
 
-1. **Headless y velocidad**: ¿el motor corre sin cliente y cuántos ticks/segundo alcanza?
-2. **Puente TS ⇄ Python**: sockets, memoria compartida, o política exportada a ONNX.
-3. **Representación de observaciones**: capas tipo imagen + vector global.
-4. **Espacio de acciones**: jerárquico con máscaras.
-5. **Recompensa**: victoria + término ligero de territorio.
-6. **Algoritmo**: PPO y diseño de self-play.
+1. ~~Headless y velocidad~~ **Resuelto en la Fase 0**: sí corre sin cliente, ~190–490 ticks/s por proceso (medido en la nube; repetir en tu PC). ADR 0003.
+2. **Puente TS ⇄ Python**: propuesta stdio/sockets binarios (ADR 0002), por medir en la Fase 1.
+3. **Representación de observaciones**: capas tipo imagen + vector global. El mapa World tiene 2 M de tiles (2000×1000), hay que reducirlo; existe un `miniGameMap` por confirmar.
+4. **Espacio de acciones**: jerárquico con máscaras. El motor ofrece `playerActions()`/`playerBuildables()` para saber qué es válido.
+5. **Recompensa**: victoria (>80 % de la tierra, o mayor territorio al acabar el tiempo) + término ligero de territorio.
+6. **Algoritmo y oponentes**: PPO; currículo tribus → naciones → liga de checkpoints (ADR 0004).
 
 ## 5. Fases
 
@@ -65,7 +67,7 @@ flowchart TD
 
 | Fase | Entregable | Criterio de salida |
 |---|---|---|
-| 0 | Informe de investigación + ADRs 0002-0003 | Se sabe si es viable headless y a qué velocidad |
+| 0 ✅ | Informe de investigación + ADRs 0002–0004 | Se sabe si es viable headless y a qué velocidad |
 | 1 | Partida completa headless con bots aleatorios | Reproducible con semilla |
 | 2 | `OpenFrontEnv` (Gymnasium) | Tests de contrato pasan |
 | 3 | Agente PPO | Curva de recompensa sube frente a bots simples |
@@ -74,7 +76,8 @@ flowchart TD
 
 ## 6. Riesgos
 
-- **Velocidad de simulación insuficiente** → paralelizar instancias o simplificar el mapa.
-- **Motor acoplado al cliente** → extraer lo mínimo desde `bridge/` sin modificar `vendor/`.
+- **Velocidad de simulación**: la medida es buena (20–50× tiempo real por proceso), pero sin medir en partidas largas ni en paralelo → medir en la Fase 1.
+- **Motor sin API pública estable** → fijar el commit del submódulo; cambios de versión vía ADR.
+- **Licencia AGPL v3 del motor** → decidir la licencia del proyecto antes de publicar (ver `engine-findings.md` §10).
 - **Recompensa explotable** → mantenerla simple y vigilar comportamientos degenerados.
 - **Espacio de acciones demasiado grande** → jerarquía y máscaras.

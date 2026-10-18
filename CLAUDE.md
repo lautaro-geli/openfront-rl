@@ -39,5 +39,9 @@ Entrenar una política (PyTorch, PPO + self-play) que juegue partidas completas 
 - `docs/specs/`: observaciones, acciones, recompensa.
 - `docs/phase0-investigation.md`: prompt de la primera sesión (investigación del motor).
 
+## Entorno
+- El motor exige **Node >=24.15 <25 y npm >=12.1 <13** (`vendor/openfront/package.json`). Con Node 22 `npm ci` falla.
+- Instalar el motor con `npm ci --ignore-scripts` dentro de `vendor/openfront` (no `npm install`). `node_modules` queda ignorado por git.
+
 ## Estado actual
-**Fase 0: investigación del motor** (aún no hay código).
+**Fase 0 completada** (ver `docs/research/engine-findings.md`). Siguiente: **Fase 1**, entorno headless con bots aleatorios (aún sin código). ADRs 0002–0004 en estado "propuesta".
