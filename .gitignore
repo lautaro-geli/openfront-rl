@@ -1,0 +1,26 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+
+# Node
+node_modules/
+dist/
+
+# Entrenamiento
+checkpoints/
+runs/
+wandb/
+*.pt
+*.onnx
+
+# Entorno y sistema
+.env
+.env.*
+.DS_Store
+.idea/
+.vscode/
