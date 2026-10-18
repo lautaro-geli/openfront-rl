@@ -1,0 +1,24 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "strictPropertyInitialization": false,
+    "skipLibCheck": true,
+    "resolveJsonModule": true,
+    "experimentalDecorators": true,
+    "useDefineForClassFields": false,
+    "noEmit": true,
+    "types": ["node"],
+    "paths": {
+      "@openfront/engine-api/*": ["../vendor/openfront/packages/engine-api/src/*"],
+      "@openfront/engine-lib/*": ["../vendor/openfront/packages/engine-lib/src/*"],
+      "@openfront/engine/*": ["../vendor/openfront/packages/engine/src/*"],
+      "@openfront/shared/*": ["../vendor/openfront/packages/shared/src/*"],
+      "@openfront/zbin/*": ["../vendor/openfront/packages/zbin/src/*"],
+      "resources/*": ["../vendor/openfront/resources/*"]
+    }
+  },
+  "include": ["src", "tests", "../vendor/openfront/packages/*/src/**/*"]
+}

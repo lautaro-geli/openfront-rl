@@ -19,5 +19,8 @@ Opción 1. El bridge arma la partida como `FullGamePerf.ts` (mapa, jugadores `Hu
 - Se aprovecha la validación de intents del motor; no hay que reimplementar reglas.
 - Para actualizar el motor: crear un ADR que registre el cambio y repetir las pruebas de contrato.
 
+## Validación (Fase 1)
+Hecha en `bridge/tests/env.test.ts`: dos entornos con misma semilla y acciones dan el mismo hash, y episodios completos corren sin errores. Coste observado: el motor depende de que sus clases se transpilen con `useDefineForClassFields: false` (ver `bridge/README.md`). Sigue en "propuesta" hasta probar varios jugadores controlados (ADR 0004).
+
 ## Cómo validarlo
 Test de humo en el bridge: partida de N ticks, mismo hash final con la misma semilla en dos ejecuciones (ya observado en la Fase 0 con `FullGamePerf.ts`).

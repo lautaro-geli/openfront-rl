@@ -1,0 +1,95 @@
+# Spec: bridge v0 (Fase 1)
+
+> Estado: **borrador implementable**. Alcance de la Fase 1: el lado TypeScript. La conexión con Python (ADR 0002) es de la Fase 2.
+> Basado en `docs/research/engine-findings.md` y ADR 0003 (usar `GameRunner` como librería).
+
+## 1. Objetivo
+Una clase `OpenFrontEnv` que arma una partida del motor sin navegador, controla **un jugador** (el agente) y devuelve observaciones reducidas, recompensa y fin de episodio. Una política aleatoria debe poder jugar partidas completas, y la misma semilla con las mismas acciones debe dar el mismo resultado.
+
+## 2. API
+
+```ts
+interface EnvConfig {
+  map: GameMapType;          // por defecto Britannia (rápido); World disponible
+  bots: number;              // tribus, 0..400
+  nations: number | "default" | "disabled";
+  difficulty: Difficulty;
+  decisionInterval: number;  // ticks del motor por step(), por defecto 10
+  maxTicks: number;          // truncado: ticks tras el fin del spawn, por defecto 6000
+  grid: { h: number; w: number }; // por defecto 32 x 64
+  maxNeighbors: number;      // slots de ataque a jugadores, por defecto 8
+  rewardTerritoryWeight: number;  // por defecto 1.0
+}
+
+class OpenFrontEnv {
+  static create(cfg: Partial<EnvConfig>): Promise<OpenFrontEnv>;
+  reset(seed: string): Promise<Observation>;
+  step(action: Action): StepResult;
+  stateHash(): string;       // hash del estado del motor (último HashUpdate) + tick
+  close(): void;
+}
+```
+
+`StepResult = { obs, reward, terminated, truncated, info }`.
+
+## 3. Ciclo de un episodio
+1. `reset(seed)` crea una partida nueva (el `gameID` del motor es la semilla). Devuelve la observación en el tick 0, en **fase de spawn**.
+2. En fase de spawn solo es válida la acción `spawn`. Tras ella, el entorno avanza solo hasta que acaba el spawn y devuelve la primera observación de juego. Cualquier otra acción en spawn se trata como `noop` y no avanza el juego más de `decisionInterval` ticks.
+3. Después, cada `step(action)` envía el intent (si lo hay) y avanza `decisionInterval` ticks.
+4. El episodio acaba (`terminated`) si el agente es eliminado o llega una actualización de victoria. Se trunca (`truncated`) al llegar a `maxTicks` ticks de juego tras el spawn.
+
+## 4. Observación
+
+- `grid`: `Float32Array` de forma `[3, h, w]`, canales: `0` tierra (1) / agua (0), `1` propio (fracción de muestras que son del agente), `2` otro jugador (fracción de muestras de cualquier otro jugador). Cada celda se estima muestreando una malla fija de 4 × 4 tiles del bloque que cubre. Tierra libre = tierra − propio − otro.
+- `globals`: `Float32Array` de 6 valores, todos en [0, 1]:
+  0. fracción de la tierra del mapa que posee el agente
+  1. tropas / máximo de tropas (recortado a 1)
+  2. `log1p(oro) / log1p(1e7)` (recortado a 1)
+  3. jugadores vivos / jugadores al inicio
+  4. ticks de juego / `maxTicks` (recortado a 1)
+  5. 1 si está en fase de spawn, 0 si no
+- `mask`: ver §5.
+- `tick`: tick actual del motor.
+
+Solo se usa información que un jugador humano vería (propiedad de tiles, sus propias tropas y oro). No se exponen tropas ni oro de otros jugadores.
+
+## 5. Acciones (v0)
+
+| Acción | Parámetros | Intent del motor | Válida cuando |
+|---|---|---|---|
+| `noop` | | ninguno | siempre |
+| `spawn` | `cx, cy` (celda del grid) | `spawn` con un tile de tierra libre cercano al centro de la celda | solo en fase de spawn |
+| `expand` | `fraction` | `attack` con `targetID: null` | fuera de spawn, agente vivo, hay tropas |
+| `attack` | `slot`, `fraction` | `attack` con `targetID` = id del vecino en ese slot | fuera de spawn, el slot tiene un vecino con el que comparte frontera y `canAttackPlayer` es verdadero |
+
+- `fraction` ∈ {0.1, 0.25, 0.5, 0.75, 1.0}; las tropas enviadas son `fraction × tropas del agente`.
+- Slots: los jugadores vivos con frontera común con el agente, ordenados por tiles descendente y desempate por `smallID`; hasta `maxNeighbors`.
+- Una acción inválida se ejecuta como `noop` y se cuenta en `info.invalidAction = true`.
+- Si el tile de `spawn` no es válido, se busca el tile de tierra libre más cercano en espiral (determinista); si no hay ninguno, `noop`.
+
+`mask`: `{ spawn: boolean, expand: boolean, attackSlots: boolean[maxNeighbors] }`.
+
+## 6. Recompensa
+Según `docs/specs/reward.md`, con estos valores concretos:
+
+```
+r = rewardTerritoryWeight * (frac_t − frac_{t−1}) + terminal
+terminal = +1 victoria, −1 eliminación, 0 truncado o sin terminar
+```
+`info.rewardParts = { territory, terminal }` para registrar cada componente.
+
+## 7. Requisitos de aceptación (tests)
+1. **Determinismo**: dos entornos con misma config, misma semilla y misma secuencia de acciones dan el mismo `stateHash()` final y la misma suma de recompensas.
+2. **Contrato**: `obs.grid.length === 3·h·w`, `obs.globals.length === 6`, todos los valores finitos y en rango.
+3. **Máscara**: con la política que solo elige acciones enmascaradas como válidas, `info.invalidAction` nunca es verdadero.
+4. **Episodio completo**: la política aleatoria acaba un episodio (`terminated` o `truncated`) sin lanzar errores.
+5. **Reset**: `reset()` repetido con la misma semilla devuelve la misma observación inicial.
+6. **Velocidad (informativa, no un criterio de paso)**: se imprimen ticks/s y pasos/s.
+
+## 8. Fuera de alcance
+Comunicación con Python, varias partidas en paralelo, construcción de edificios, diplomacia, ataques anfibios, self-play (más de un agente), y `miniGameMap`. Cada uno se añade con su propia spec.
+
+## 9. Preguntas abiertas
+- Valor correcto de `rewardTerritoryWeight` (placeholder).
+- Si la malla de muestreo 4 × 4 pierde territorios pequeños en World.
+- Si `maxTicks = 6000` (10 min de juego) alcanza para que la política aleatoria llegue a ver victorias o eliminaciones.

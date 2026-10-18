@@ -23,7 +23,9 @@ Entrenar una política (PyTorch, PPO + self-play) que juegue partidas completas 
 
 ## Comandos
 > Se completarán cuando existan (actualizar este bloque en cada fase).
-- Tests bridge: `cd bridge && npm test`
+- Typecheck bridge: `cd bridge && npm run typecheck`
+- Tests bridge: `cd bridge && npm test` (8 tests, ~45 s)
+- Política aleatoria: `cd bridge && npm run random -- --bots 20 --seed s --episodes 4`
 - Tests trainer: `cd trainer && pytest`
 - Entrenar: `cd trainer && python -m openfront_rl.train --config configs/ppo_base.yaml`
 
@@ -44,4 +46,7 @@ Entrenar una política (PyTorch, PPO + self-play) que juegue partidas completas 
 - Instalar el motor con `npm ci --ignore-scripts` dentro de `vendor/openfront` (no `npm install`). `node_modules` queda ignorado por git.
 
 ## Estado actual
-**Fase 0 completada** (ver `docs/research/engine-findings.md`). Siguiente: **Fase 1**, entorno headless con bots aleatorios (aún sin código). ADRs 0002–0004 en estado "propuesta".
+**Fase 0 completada** (`docs/research/engine-findings.md`). **Fase 1, lado TypeScript hecho** (`bridge/`, `docs/specs/bridge.md`, `docs/research/phase1-results.md`). Siguiente: Fase 2, comunicación con Python y wrapper Gymnasium. ADRs 0002–0004 siguen en "propuesta".
+
+## Trampa conocida
+`bridge/tsconfig.json` DEBE incluir `../vendor/openfront/packages/*/src/**/*`; si no, `tsx` transpila mal las clases del motor y falla en la primera partida (ver `bridge/README.md`).

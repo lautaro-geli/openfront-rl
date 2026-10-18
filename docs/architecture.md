@@ -1,6 +1,6 @@
 # Arquitectura de openfront-rl
 
-> Estado: **Fase 0 completada** (ver `docs/research/engine-findings.md`). Lo marcado con ⚠️ sigue siendo propuesta o está sin medir; los ADRs 0002–0004 están en estado "propuesta" hasta validarse en la Fase 1.
+> Estado: **Fase 0 completada, Fase 1 (lado TypeScript) hecha** (ver `docs/research/engine-findings.md`). Lo marcado con ⚠️ sigue siendo propuesta o está sin medir; los ADRs 0002–0004 están en estado "propuesta" hasta validarse en la Fase 1.
 >
 > Resumen de la Fase 0: el motor corre sin navegador a ~190–490 ticks/s por proceso (el juego real va a 10), es determinista (mismo hash con la misma semilla) y acepta 25 tipos de intents. Requiere Node 24.15+ y npm 12.1+.
 
@@ -68,7 +68,7 @@ flowchart TD
 | Fase | Entregable | Criterio de salida |
 |---|---|---|
 | 0 ✅ | Informe de investigación + ADRs 0002–0004 | Se sabe si es viable headless y a qué velocidad |
-| 1 | Partida completa headless con bots aleatorios | Reproducible con semilla |
+| 1 🟡 | Partida completa headless con política aleatoria (lado TS hecho: `bridge/`, ver `docs/research/phase1-results.md`) | Reproducible con semilla ✅. Falta medir en tu PC y el IPC con Python (pasa a Fase 2) |
 | 2 | `OpenFrontEnv` (Gymnasium) | Tests de contrato pasan |
 | 3 | Agente PPO | Curva de recompensa sube frente a bots simples |
 | 4 | Self-play y liga | Gana de forma consistente a checkpoints anteriores |

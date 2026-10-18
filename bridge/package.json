@@ -1,0 +1,19 @@
+{
+  "name": "openfront-rl-bridge",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Puente TypeScript entre el motor de OpenFront (vendor/openfront) y el entrenador en Python",
+  "engines": { "node": ">=24.15.0 <25", "npm": ">=12.1.0 <13" },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "random": "tsx src/cli/runRandom.ts"
+  },
+  "devDependencies": {
+    "@types/node": "^24.12.0",
+    "tsx": "^4.22.4",
+    "typescript": "^6.0.3",
+    "vitest": "^4.1.11"
+  }
+}
