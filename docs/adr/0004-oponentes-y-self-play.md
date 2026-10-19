@@ -15,8 +15,9 @@ El motor trae dos IA propias: Tribus (`TribeExecution.ts`, simples) y Naciones (
 Opción 3, por fases: Fase 3 contra tribus/naciones; Fase 4 con liga de checkpoints.
 
 ## Consecuencias
-- Hay que verificar que el motor soporta bien varios jugadores controlados por código en la misma partida (**no probado todavía**; el PoC usó uno).
+- Verificado (2026-10-19): el motor ejecuta los intents de varios jugadores controlados por código en la misma partida. Tests con 2 agentes (`bridge/tests/multi.test.ts`) y ejecuciones con 2 y 4 agentes heurísticos. Un agente sin acciones no cambia su territorio mientras otro se expande, o sea que cada intent llega a su jugador.
+- Observado, sin investigar: con 4 agentes heurísticos en Britannia, 2 acabaron eliminados. Pudo ser por spawns cercanos (la heurística elige el mismo mejor sitio para todos); no lo comprobé.
 - La evaluación se hace siempre contra un conjunto fijo de oponentes y semillas, para poder comparar versiones.
 
 ## Cómo validarlo
-Fase 1/2: partida con 2+ jugadores controlados por código y comprobación de que ambos actúan. Fase 3: curva de victorias contra tribus `Easy`.
+Hecho en la Fase 1 para el soporte técnico (ver arriba). Falta la liga de checkpoints (Fase 4). Fase 3: curva de victorias contra tribus `Easy`.

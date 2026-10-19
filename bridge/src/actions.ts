@@ -12,7 +12,13 @@ export function neighborSlots(game: Game, me: Player, maxNeighbors: number): Pla
     .slice(0, maxNeighbors);
 }
 
-export function computeMask(game: Game, me: Player, maxNeighbors: number): ActionMask {
+/** Máscara de acciones junto con los vecinos de cada slot (para no recalcularlos al traducir la acción). */
+export interface MaskInfo {
+  mask: ActionMask;
+  slots: Player[];
+}
+
+export function computeMaskInfo(game: Game, me: Player, maxNeighbors: number): MaskInfo {
   const inSpawn = game.inSpawnPhase();
   const canAct = !inSpawn && me.isAlive() && me.troops() > 0;
   const slots = neighborSlots(game, me, maxNeighbors);
@@ -21,7 +27,11 @@ export function computeMask(game: Game, me: Player, maxNeighbors: number): Actio
     const p = slots[i];
     attackSlots.push(canAct && p !== undefined && me.canAttackPlayer(p));
   }
-  return { spawn: inSpawn, expand: canAct, attackSlots };
+  return { mask: { spawn: inSpawn, expand: canAct, attackSlots }, slots };
+}
+
+export function computeMask(game: Game, me: Player, maxNeighbors: number): ActionMask {
+  return computeMaskInfo(game, me, maxNeighbors).mask;
 }
 
 /** Tile de tierra libre más cercano al centro de la celda (búsqueda en anillos, determinista). */
@@ -57,10 +67,11 @@ export function actionToIntents(
   game: Game,
   me: Player,
   clientID: string,
-  mask: ActionMask,
+  info: MaskInfo,
   grid: { h: number; w: number },
   maxNeighbors: number,
 ): BuiltIntents {
+  const { mask, slots } = info;
   const none: BuiltIntents = { intents: [], invalid: false };
   switch (action.kind) {
     case "noop":
@@ -91,7 +102,7 @@ export function actionToIntents(
       ) {
         return { intents: [], invalid: true };
       }
-      const target = neighborSlots(game, me, maxNeighbors)[action.slot];
+      const target = slots[action.slot];
       if (target === undefined) return { intents: [], invalid: true };
       return {
         intents: [{ type: "attack", targetID: target.id(), troops: me.troops() * action.fraction, clientID }],

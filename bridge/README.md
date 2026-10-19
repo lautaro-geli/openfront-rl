@@ -18,24 +18,29 @@ npm install
 ## Comandos
 ```bash
 npm run typecheck                 # tsc --noEmit
-npm test                          # vitest (8 tests, ~45 s)
+npm test                          # vitest (16 tests, ~1-2 min)
 npm run random -- --bots 20 --seed s --episodes 4            # política aleatoria, Britannia
+npm run random -- --policy heuristic --bots 20 --episodes 4  # política escrita a mano
 npm run random -- --map world --bots 400 --max-ticks 3000    # mapa grande
 ```
 
 ## Estructura
 | Archivo | Qué hace |
 |---|---|
-| `src/env.ts` | `OpenFrontEnv`: arma la partida con `GameRunner`, `reset`, `step`, recompensa, fin de episodio |
+| `src/multiEnv.ts` | `MultiAgentEnv`: arma la partida con `GameRunner`, uno o más agentes, `reset`, `step`, recompensa, fin de episodio |
+| `src/env.ts` | `OpenFrontEnv`: envoltorio de un solo agente |
 | `src/observation.ts` | Grid `[3, h, w]` por muestreo de tiles + vector global de 6 valores |
 | `src/actions.ts` | Máscara de acciones válidas y traducción acción → intent del motor |
 | `src/randomPolicy.ts` | Política aleatoria que respeta la máscara, con semilla |
+| `src/heuristicPolicy.ts` | Política escrita a mano (línea base) |
 | `src/mapLoader.ts` | Carga de mapas desde `vendor/openfront/resources/maps` |
 | `src/cli/runRandom.ts` | Juega episodios completos y muestra velocidad |
-| `tests/env.test.ts` | Determinismo, contrato de observación, máscara, episodio completo |
+| `tests/env.test.ts` | Determinismo, contrato de observación, máscara, episodio completo, reducción del mapa |
+| `tests/multi.test.ts` | Varios agentes en la misma partida |
+| `tests/policies.test.ts` | La heurística supera a la aleatoria |
 
 ## Trampa conocida: la configuración de TypeScript
 El motor necesita que sus clases se transpilen con `useDefineForClassFields: false` (usa propiedades de parámetro en inicializadores de campo). `tsx` solo aplica las opciones de `tsconfig.json` a los archivos que ese `tsconfig` incluye, así que `bridge/tsconfig.json` incluye `../vendor/openfront/packages/*/src/**/*`. **Si se quita esa línea, el motor falla en la primera partida con "Cannot read properties of undefined (reading 'unitInfo')".**
 
 ## Límites actuales
-Un solo jugador controlado, sin construcción, diplomacia ni ataques anfibios. Ver §8 de la spec.
+Sin construcción, diplomacia ni ataques anfibios. Ver §8 de la spec. Varios agentes soportados con `MultiAgentEnv`; el spawn simultáneo de varios agentes no se ha estudiado a fondo.

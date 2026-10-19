@@ -109,3 +109,25 @@ describe("OpenFrontEnv", () => {
     env.close();
   });
 });
+
+describe("reducción del mapa", () => {
+  it("gridForMap respeta la proporción del mapa", async () => {
+    const { gridForMap } = await import("../src/observation");
+    expect(gridForMap(2000, 1000)).toEqual({ h: 32, w: 64 });
+    const b = gridForMap(1600, 2088);
+    expect(b.h).toBeGreaterThan(b.w);
+    expect(Math.abs(b.h * b.w - 2048)).toBeLessThan(200);
+  });
+
+  it("samples distinto da una observación válida y distinta resolución de muestreo", async () => {
+    for (const samples of [2, 4]) {
+      const env = await OpenFrontEnv.create({ ...SMALL, samples });
+      const o = await env.reset("samples-1");
+      expect(o.grid.length).toBe(NUM_CHANNELS * 32 * 64);
+      for (const v of o.grid) expect(v >= 0 && v <= 1).toBe(true);
+      env.close();
+    }
+    const env = await OpenFrontEnv.create({ ...SMALL, samples: 0 }).catch((e) => e);
+    expect(env).toBeInstanceOf(Error);
+  });
+});

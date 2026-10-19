@@ -16,7 +16,9 @@ interface EnvConfig {
   difficulty: Difficulty;
   decisionInterval: number;  // ticks del motor por step(), por defecto 10
   maxTicks: number;          // truncado: ticks tras el fin del spawn, por defecto 6000
-  grid: { h: number; w: number }; // por defecto 32 x 64
+  grid: { h: number; w: number }; // por defecto 32 x 64; gridForMap() la calcula según la forma del mapa
+  samples: number;           // muestras por eje y celda, por defecto 4 (ADR 0005)
+  agents: number;            // jugadores controlados; 1 en OpenFrontEnv
   maxNeighbors: number;      // slots de ataque a jugadores, por defecto 8
   rewardTerritoryWeight: number;  // por defecto 1.0
 }
@@ -31,6 +33,18 @@ class OpenFrontEnv {
 ```
 
 `StepResult = { obs, reward, terminated, truncated, info }`.
+
+### Varios agentes (self-play)
+`MultiAgentEnv` es el núcleo; `OpenFrontEnv` es un envoltorio con `agents = 1`.
+
+```ts
+reset(seed): Promise<Observation[]>            // una observación por agente, cada una relativa a su agente
+step(actions: Action[]): MultiStepResult       // { obs[], reward[], terminated[], truncated, done, info[] }
+```
+- Todas las acciones se calculan sobre el mismo estado y viajan en el primer tick del paso.
+- La fase de spawn se termina sola cuando todos los agentes han aparecido.
+- `terminated[i]` es verdadero si el agente `i` fue eliminado o la partida acabó con victoria; `done` es verdadero cuando acaba la partida (victoria, todos eliminados o truncado). Un agente eliminado sigue recibiendo observaciones vacías y su acción se ignora.
+- Un agente eliminado cobra −1 una sola vez; si la partida acaba con la victoria de otro, el resto cobra 0.
 
 ## 3. Ciclo de un episodio
 1. `reset(seed)` crea una partida nueva (el `gameID` del motor es la semilla). Devuelve la observación en el tick 0, en **fase de spawn**.
@@ -85,11 +99,13 @@ terminal = +1 victoria, −1 eliminación, 0 truncado o sin terminar
 4. **Episodio completo**: la política aleatoria acaba un episodio (`terminated` o `truncated`) sin lanzar errores.
 5. **Reset**: `reset()` repetido con la misma semilla devuelve la misma observación inicial.
 6. **Velocidad (informativa, no un criterio de paso)**: se imprimen ticks/s y pasos/s.
+7. **Multiagente**: con 2 agentes, uno que no actúa conserva su territorio y otro que se expande crece; las observaciones son relativas a cada agente; misma semilla y acciones dan el mismo resultado.
+8. **Jugabilidad**: una política heurística (`HeuristicPolicy`) debe crecer mucho más que la aleatoria y no hacer acciones inválidas.
 
 ## 8. Fuera de alcance
-Comunicación con Python, varias partidas en paralelo, construcción de edificios, diplomacia, ataques anfibios, self-play (más de un agente), y `miniGameMap`. Cada uno se añade con su propia spec.
+Comunicación con Python, varias partidas en paralelo, construcción de edificios, diplomacia, ataques anfibios, y `miniGameMap`. Cada uno se añade con su propia spec.
 
 ## 9. Preguntas abiertas
 - Valor correcto de `rewardTerritoryWeight` (placeholder).
-- Si la malla de muestreo 4 × 4 pierde territorios pequeños en World.
+- ~~Si la malla de muestreo 4 × 4 pierde territorios pequeños en World~~ Medido en ADR 0005: no ve territorios de 1 tile; con 32 × 64 ve el 67–84 % de las celdas ocupadas.
 - Si `maxTicks = 6000` (10 min de juego) alcanza para que la política aleatoria llegue a ver victorias o eliminaciones.

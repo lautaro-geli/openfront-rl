@@ -7,22 +7,21 @@ import {
   type Observation,
 } from "./types";
 
-const SAMPLES = 4; // malla de SAMPLES x SAMPLES tiles por celda
 const GOLD_LOG_NORM = Math.log1p(1e7);
 
 /** Tiles que se muestrean para cada celda del grid. Se calcula una vez por mapa. */
-export function buildSamplePlan(game: Game, h: number, w: number): Int32Array {
+export function buildSamplePlan(game: Game, h: number, w: number, samples: number): Int32Array {
   const map = game.map();
   const W = map.width();
   const H = map.height();
-  const plan = new Int32Array(h * w * SAMPLES * SAMPLES);
+  const plan = new Int32Array(h * w * samples * samples);
   let k = 0;
   for (let cy = 0; cy < h; cy++) {
     for (let cx = 0; cx < w; cx++) {
-      for (let sy = 0; sy < SAMPLES; sy++) {
-        for (let sx = 0; sx < SAMPLES; sx++) {
-          const x = Math.min(W - 1, Math.floor(((cx + (sx + 0.5) / SAMPLES) * W) / w));
-          const y = Math.min(H - 1, Math.floor(((cy + (sy + 0.5) / SAMPLES) * H) / h));
+      for (let sy = 0; sy < samples; sy++) {
+        for (let sx = 0; sx < samples; sx++) {
+          const x = Math.min(W - 1, Math.floor(((cx + (sx + 0.5) / samples) * W) / w));
+          const y = Math.min(H - 1, Math.floor(((cy + (sy + 0.5) / samples) * H) / h));
           plan[k++] = map.ref(x, y);
         }
       }
@@ -48,7 +47,7 @@ export function buildObservation(
   const map = game.map();
   const grid = new Float32Array(NUM_CHANNELS * h * w);
   const cells = h * w;
-  const per = SAMPLES * SAMPLES;
+  const per = ctx.cfg.samples * ctx.cfg.samples;
   const meSmall = me.smallID();
   let k = 0;
   for (let c = 0; c < cells; c++) {
@@ -82,4 +81,15 @@ export function buildObservation(
   globals[5] = inSpawn ? 1 : 0;
 
   return { grid, globals, mask, tick: game.ticks(), inSpawnPhase: inSpawn };
+}
+
+/**
+ * Elige una rejilla (h, w) con unas `targetCells` celdas y la proporción del mapa,
+ * para que las celdas sean casi cuadradas. Ej.: World 2000x1000 -> 32x64; Britannia 1600x2088 -> 52x40.
+ */
+export function gridForMap(width: number, height: number, targetCells = 2048): { h: number; w: number } {
+  const aspect = width / height;
+  const h = Math.max(1, Math.round(Math.sqrt(targetCells / aspect)));
+  const w = Math.max(1, Math.round(h * aspect));
+  return { h, w };
 }

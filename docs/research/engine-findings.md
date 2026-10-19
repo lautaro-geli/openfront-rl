@@ -110,6 +110,7 @@ Cada afirmación está marcada así:
 
 - **[leído]** El motor exige determinismo bit a bit: PRNG con semilla y `DetMath` en lugar de `Math.*` (`CLAUDE.md` del motor).
 - **[medido]** Dos ejecuciones con la misma semilla (`rl-test`, World, 400 bots, 1800 ticks) dieron el mismo hash final: `26347989348602096` en el tick 2000.
+- **[medido]** El mismo hash final (`26347989348602096` en el tick 2000, World, 400 bots, semilla `rl-test`) salió en dos máquinas distintas, una con el doble de velocidad que la otra. Es una evidencia fuerte de que el resultado no depende de la máquina.
 - **[leído]** Hay snapshots de la partida completa: `GameRunner.snapshot()` y `createGameRunnerFromSnapshot()` (`GameRunner.ts:166` y `:118`). Una partida tardía de World tarda unos 90 ms en guardarse y 150 ms en restaurarse (`packages/engine/src/snapshot/README.md`, cifra del propio repo, **no medida por mí**).
 - **Uso posible**: reiniciar episodios desde situaciones intermedias, o evaluar desde posiciones fijas.
 
@@ -118,8 +119,8 @@ Cada afirmación está marcada así:
 1. Repetir las mediciones de velocidad en tu PC y en la máquina que entrenará.
 2. Comprobar cuántas partidas en paralelo caben por proceso/máquina y si hay estado global compartido.
 3. Medir partidas largas (decenas de miles de ticks).
-4. Probar dos o más jugadores controlados por código en la misma partida (self-play).
-5. Confirmar cómo se reduce el mapa (`miniGameMap`) y si sirve como observación.
+4. ~~Probar dos o más jugadores controlados por código en la misma partida~~ **Resuelto (2026-10-19)**: funciona con 2 agentes en los tests y con 2 y 4 en ejecuciones sueltas (`bridge/tests/multi.test.ts`, `docs/research/phase1-results.md`).
+5. ~~Confirmar cómo se reduce el mapa~~ **Resuelto (2026-10-19)**: `miniGameMap` no sirve para propiedad; se usa muestreo por celdas. Ver ADR 0005.
 6. En el PoC apareció `cannot build Defense Post` en la salida; no investigué su origen (probablemente una IA de nación).
 7. La prueba de velocidad con 400 bots mostró "472 jugadores aparecieron" pero "77 / 77 vivos"; no sé explicar la diferencia (puede ser que `players()` solo cuente a los que tienen tiles).
 8. El agente del PoC, con una política ingenua, llegó a 3439 tiles y fue eliminado hacia el tick 2200. Eso solo prueba que el ciclo funciona, no dice nada del aprendizaje.

@@ -14,8 +14,12 @@ export interface EnvConfig {
   decisionInterval: number;
   maxTicks: number;
   grid: { h: number; w: number };
+  /** Muestras por eje y por celda al reducir el mapa (S x S tiles por celda). */
+  samples: number;
   maxNeighbors: number;
   rewardTerritoryWeight: number;
+  /** Número de jugadores controlados por código en la partida (MultiAgentEnv). */
+  agents: number;
 }
 
 export type Action =
@@ -54,4 +58,17 @@ export interface StepResult {
   terminated: boolean;
   truncated: boolean;
   info: StepInfo;
+}
+
+export interface MultiStepResult {
+  /** Una observación por agente, relativa a ese agente. */
+  obs: Observation[];
+  reward: number[];
+  /** Por agente: eliminado, o la partida terminó con victoria. */
+  terminated: boolean[];
+  /** La partida alcanzó maxTicks. Es de toda la partida. */
+  truncated: boolean;
+  /** La partida terminó: victoria, todos eliminados, o truncada. */
+  done: boolean;
+  info: StepInfo[];
 }
