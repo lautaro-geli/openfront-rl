@@ -23,7 +23,14 @@ import { GameRunner } from "@openfront/engine/GameRunner";
 import { loadMapFiles } from "@openfront/shared/GameMapLoader";
 import { actionToIntents, computeMaskInfo, type MaskInfo } from "./actions";
 import { FsMapLoader } from "./mapLoader";
-import { buildObservation, buildSamplePlan, type ObsContext } from "./observation";
+import {
+  buildFrame,
+  buildObservation,
+  buildSamplePlan,
+  RateTracker,
+  type ObsContext,
+  type SamplePlan,
+} from "./observation";
 import type { Action, EnvConfig, MultiStepResult, Observation, StepInfo } from "./types";
 
 const MAX_SPAWN_TICKS = 1000;
@@ -61,7 +68,8 @@ interface Episode {
   game: Game;
   runner: GameRunner;
   agents: Agent[];
-  plan: Int32Array;
+  plan: SamplePlan;
+  rates: RateTracker;
   turn: number;
   lastHash: HashUpdate | undefined;
   sawWin: boolean;
@@ -173,6 +181,7 @@ export class MultiAgentEnv {
       return { clientID: p.clientID, me, prevFrac: 0, eliminated: false, maskInfo: null };
     });
     ep.plan = buildSamplePlan(game, cfg.grid.h, cfg.grid.w, cfg.samples);
+    ep.rates = new RateTracker();
     this.ep = ep;
     return this.observeAll();
   }
@@ -275,12 +284,18 @@ export class MultiAgentEnv {
       plan: ep.plan,
       initialPlayers: ep.initialPlayers,
       ticksSinceSpawnEnd: ep.spawnEndTick === null ? 0 : ep.game.ticks() - ep.spawnEndTick,
+      // Una sola vez por paso; lo comparten todos los agentes.
+      frame: buildFrame(ep.game, ep.rates),
     };
     return ep.agents.map((a) => {
       a.maskInfo = a.eliminated
-        ? { mask: { spawn: false, expand: false, attackSlots: Array(this.cfg.maxNeighbors).fill(false) }, slots: [] }
+        ? {
+            mask: { spawn: false, expand: false, attackSlots: Array(this.cfg.maxNeighbors).fill(false) },
+            slots: [],
+            neighbors: [],
+          }
         : computeMaskInfo(ep.game, a.me, this.cfg.maxNeighbors);
-      return buildObservation(ep.game, a.me, ctx, a.maskInfo.mask);
+      return buildObservation(ep.game, a.me, ctx, a.maskInfo);
     });
   }
 

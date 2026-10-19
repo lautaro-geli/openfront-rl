@@ -3,8 +3,7 @@ import type { Difficulty, GameMapType } from "@openfront/engine-api/game/GameTyp
 export const FRACTIONS = [0.1, 0.25, 0.5, 0.75, 1.0] as const;
 export type Fraction = (typeof FRACTIONS)[number];
 
-export const NUM_CHANNELS = 3;
-export const NUM_GLOBALS = 6;
+export { NUM_CHANNELS, NUM_GLOBALS } from "./features";
 
 export interface EnvConfig {
   map: GameMapType;
@@ -34,14 +33,28 @@ export interface ActionMask {
   attackSlots: boolean[];
 }
 
+/** Tabla de filas de tamaño fijo, aplanada por filas. `valid[i]` = 1 si la fila `i` tiene datos. */
+export interface Table {
+  data: Float32Array;
+  valid: Uint8Array;
+  rows: number;
+  cols: number;
+}
+
 export interface Observation {
-  /** [NUM_CHANNELS, h, w] aplanado: 0 tierra, 1 propio, 2 otro jugador. */
+  /** [NUM_CHANNELS, h, w] aplanado. Canales 0 tierra, 1 propio, 2 otro jugador; el resto en features.ts (GRID_CHANNELS). */
   grid: Float32Array;
-  /** Ver docs/specs/bridge.md §4. */
+  /** Escalares generales (GLOBAL_FEATURES). Los 6 primeros son los de la v1. */
   globals: Float32Array;
   mask: ActionMask;
   tick: number;
   inSpawnPhase: boolean;
+  /** Entrada de la rama de economía. Ver docs/specs/observations.md §4. */
+  economy: { table: Table; scalars: Float32Array };
+  /** Entrada de la rama de defensa y ataque. Ver docs/specs/observations.md §5. */
+  military: { units: Table; attacks: Table; scalars: Float32Array };
+  /** Entrada de la rama de comparación. Ver docs/specs/observations.md §6. La fila 0 es el agente; las filas 1 a 8 son las ranuras de ataque. */
+  comparison: { players: Table; scalars: Float32Array };
 }
 
 export interface StepInfo {

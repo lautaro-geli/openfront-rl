@@ -2,32 +2,39 @@ import type { Game, Player } from "@openfront/engine/game/Game";
 import type { StampedIntent } from "@openfront/engine-api/Schemas";
 import { type Action, type ActionMask, FRACTIONS } from "./types";
 
-/** Jugadores vivos que comparten frontera con el agente, ordenados por tiles desc y smallID asc. */
-export function neighborSlots(game: Game, me: Player, maxNeighbors: number): Player[] {
+/** Todos los jugadores vivos que comparten frontera con el agente, ordenados por tiles desc y smallID asc. */
+export function allNeighbors(game: Game, me: Player): Player[] {
   if (!me.isAlive()) return [];
   return game
     .players()
     .filter((p) => p !== me && p.isAlive() && me.sharesBorderWith(p))
-    .sort((a, b) => b.numTilesOwned() - a.numTilesOwned() || a.smallID() - b.smallID())
-    .slice(0, maxNeighbors);
+    .sort((a, b) => b.numTilesOwned() - a.numTilesOwned() || a.smallID() - b.smallID());
+}
+
+/** Los primeros `maxNeighbors` vecinos: las ranuras de ataque. */
+export function neighborSlots(game: Game, me: Player, maxNeighbors: number): Player[] {
+  return allNeighbors(game, me).slice(0, maxNeighbors);
 }
 
 /** Máscara de acciones junto con los vecinos de cada slot (para no recalcularlos al traducir la acción). */
 export interface MaskInfo {
   mask: ActionMask;
   slots: Player[];
+  /** Todos los vecinos (las ranuras son sus primeros `maxNeighbors`). La observación los usa. */
+  neighbors: Player[];
 }
 
 export function computeMaskInfo(game: Game, me: Player, maxNeighbors: number): MaskInfo {
   const inSpawn = game.inSpawnPhase();
   const canAct = !inSpawn && me.isAlive() && me.troops() > 0;
-  const slots = neighborSlots(game, me, maxNeighbors);
+  const neighbors = allNeighbors(game, me);
+  const slots = neighbors.slice(0, maxNeighbors);
   const attackSlots: boolean[] = [];
   for (let i = 0; i < maxNeighbors; i++) {
     const p = slots[i];
     attackSlots.push(canAct && p !== undefined && me.canAttackPlayer(p));
   }
-  return { mask: { spawn: inSpawn, expand: canAct, attackSlots }, slots };
+  return { mask: { spawn: inSpawn, expand: canAct, attackSlots }, slots, neighbors };
 }
 
 export function computeMask(game: Game, me: Player, maxNeighbors: number): ActionMask {

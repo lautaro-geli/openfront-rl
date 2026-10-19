@@ -3,6 +3,13 @@ import { OpenFrontEnv } from "../src/env";
 import { RandomPolicy } from "../src/randomPolicy";
 import { type EnvConfig, NUM_CHANNELS, NUM_GLOBALS, type Observation } from "../src/types";
 
+/** Cuenta los valores no finitos o fuera de [lo, hi]. Un solo expect por arreglo: miles de expect() hacen lento el test. */
+function outOfRange(a: ArrayLike<number>, lo: number, hi: number): number {
+  let bad = 0;
+  for (let i = 0; i < a.length; i++) if (!(a[i] >= lo && a[i] <= hi)) bad++;
+  return bad;
+}
+
 const SMALL: Partial<EnvConfig> = { bots: 10, maxTicks: 1500 };
 
 async function playEpisode(seed: string, cfg: Partial<EnvConfig> = SMALL) {
@@ -56,16 +63,8 @@ describe("OpenFrontEnv", () => {
     for (const o of obsChecks) {
       expect(o.grid.length).toBe(NUM_CHANNELS * cfg.h * cfg.w);
       expect(o.globals.length).toBe(NUM_GLOBALS);
-      for (const v of o.grid) {
-        expect(Number.isFinite(v)).toBe(true);
-        expect(v).toBeGreaterThanOrEqual(0);
-        expect(v).toBeLessThanOrEqual(1);
-      }
-      for (const v of o.globals) {
-        expect(Number.isFinite(v)).toBe(true);
-        expect(v).toBeGreaterThanOrEqual(0);
-        expect(v).toBeLessThanOrEqual(1);
-      }
+      expect(outOfRange(o.grid, 0, 1)).toBe(0);
+      expect(outOfRange(o.globals, 0, 1)).toBe(0);
       expect(o.mask.attackSlots.length).toBe(8);
     }
   });

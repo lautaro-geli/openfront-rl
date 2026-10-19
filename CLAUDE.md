@@ -24,7 +24,7 @@ Entrenar una política (PyTorch, PPO + self-play) que juegue partidas completas 
 ## Comandos
 > Se completarán cuando existan (actualizar este bloque en cada fase).
 - Typecheck bridge: `cd bridge && npm run typecheck`
-- Tests bridge: `cd bridge && npm test` (16 tests, ~1-2 min)
+- Tests bridge: `cd bridge && npm test` (21 tests, ~3 min)
 - Política aleatoria o heurística: `cd bridge && npm run random -- --policy heuristic --bots 20 --seed s --episodes 4`
 - Tests trainer: `cd trainer && pytest`
 - Entrenar: `cd trainer && python -m openfront_rl.train --config configs/ppo_base.yaml`
@@ -46,7 +46,7 @@ Entrenar una política (PyTorch, PPO + self-play) que juegue partidas completas 
 - Instalar el motor con `npm ci --ignore-scripts` dentro de `vendor/openfront` (no `npm install`). `node_modules` queda ignorado por git.
 
 ## Estado actual
-**Fase 0 completada** (`docs/research/engine-findings.md`). **Fase 1, lado TypeScript hecho** (`bridge/`, `docs/specs/bridge.md`, `docs/research/phase1-results.md`): un agente o varios, observación reducida (ADR 0005) y política heurística como línea base. Siguiente: Fase 2, comunicación con Python y wrapper Gymnasium. ADRs 0002–0005 siguen en "propuesta".
+**Fase 0 completada** (`docs/research/engine-findings.md`). **Fase 1, lado TypeScript hecho** (`bridge/`, `docs/specs/bridge.md`, `docs/research/phase1-results.md`): un agente o varios, observación v2 de 4 ramas (ADR 0006, `docs/specs/observations.md`) y política heurística como línea base. Siguiente: Fase 2, comunicación con Python y wrapper Gymnasium. ADRs 0002–0005 siguen en "propuesta".
 
 ## Trampa conocida
 `bridge/tsconfig.json` DEBE incluir `../vendor/openfront/packages/*/src/**/*`; si no, `tsx` transpila mal las clases del motor y falla en la primera partida (ver `bridge/README.md`).

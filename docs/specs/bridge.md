@@ -52,20 +52,18 @@ step(actions: Action[]): MultiStepResult       // { obs[], reward[], terminated[
 3. Después, cada `step(action)` envía el intent (si lo hay) y avanza `decisionInterval` ticks.
 4. El episodio acaba (`terminated`) si el agente es eliminado o llega una actualización de victoria. Se trunca (`truncated`) al llegar a `maxTicks` ticks de juego tras el spawn.
 
-## 4. Observación
+## 4. Observación (v2)
 
-- `grid`: `Float32Array` de forma `[3, h, w]`, canales: `0` tierra (1) / agua (0), `1` propio (fracción de muestras que son del agente), `2` otro jugador (fracción de muestras de cualquier otro jugador). Cada celda se estima muestreando una malla fija de 4 × 4 tiles del bloque que cubre. Tierra libre = tierra − propio − otro.
-- `globals`: `Float32Array` de 6 valores, todos en [0, 1]:
-  0. fracción de la tierra del mapa que posee el agente
-  1. tropas / máximo de tropas (recortado a 1)
-  2. `log1p(oro) / log1p(1e7)` (recortado a 1)
-  3. jugadores vivos / jugadores al inicio
-  4. ticks de juego / `maxTicks` (recortado a 1)
-  5. 1 si está en fase de spawn, 0 si no
-- `mask`: ver §5.
-- `tick`: tick actual del motor.
+La definición completa (canales, tablas, escalares, normalización, fuentes en el motor) está en `docs/specs/observations.md`; los nombres y tamaños están en `bridge/src/features.ts`. Resumen:
 
-Solo se usa información que un jugador humano vería (propiedad de tiles, sus propias tropas y oro). No se exponen tropas ni oro de otros jugadores.
+- `grid` `[20, h, w]`: los 3 canales de la v1 (0 tierra, 1 propio, 2 otro; índices estables) más relieve, costa, aliados, vecinos, top 3, fallout, estructuras, cobertura SAM y de defensas, objetivos de bombas, barcos y ataques.
+- `economy`: tabla `[48, 9]` (ciudades, puertos, fábricas) y 38 escalares (tropas máximas, oro, ingresos, costes y capacidad de pago).
+- `military`: tabla de unidades `[96, 30]`, tabla de ataques `[16, 10]` y 23 escalares.
+- `comparison`: tabla de jugadores `[16, 46]` (fila 0 = el agente, filas 1-8 = ranuras de ataque, 3 del top, 4 aliados) y 14 escalares, en [-1, 1].
+- `globals` 14 valores; los 2 primeros siguen siendo los de la v1.
+- `mask`, `tick`, `inSpawnPhase` sin cambios.
+
+Información pública: el motor entrega oro, tropas, estructuras, alianzas y ataques de todos los jugadores a cada cliente (`PlayerUpdate`, `GameUpdates.ts:237-282`), así que verlos no es trampa.
 
 ## 5. Acciones (v0)
 
