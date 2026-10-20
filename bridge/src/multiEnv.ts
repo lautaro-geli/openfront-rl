@@ -22,6 +22,7 @@ import { createNationsForGame } from "@openfront/engine/game/NationCreation";
 import { GameRunner } from "@openfront/engine/GameRunner";
 import { loadMapFiles } from "@openfront/shared/GameMapLoader";
 import { actionToIntents, computeMaskInfo, type MaskInfo } from "./actions";
+import { emptyMask } from "./mask";
 import { FsMapLoader } from "./mapLoader";
 import {
   buildFrame,
@@ -186,7 +187,7 @@ export class MultiAgentEnv {
     return this.observeAll();
   }
 
-  step(actions: Action[]): MultiStepResult {
+  step(actions: (Action | null)[]): MultiStepResult {
     const ep = this.requireEpisode();
     if (ep.done) throw new Error("el episodio terminó; llama a reset()");
     const { game, agents } = ep;
@@ -200,8 +201,13 @@ export class MultiAgentEnv {
         invalid.push(false);
         return;
       }
-      const action: Action = actions[i] ?? { kind: "noop" };
-      const info = a.maskInfo ?? computeMaskInfo(game, a.me, cfg.maxNeighbors);
+      const given = actions[i];
+      if (given === null) {
+        invalid.push(true); // el protocolo no pudo decodificar la acción
+        return;
+      }
+      const action: Action = given ?? { kind: "noop" };
+      const info = a.maskInfo ?? computeMaskInfo(game, a.me, cfg.maxNeighbors, cfg.grid.h * cfg.grid.w);
       const built = actionToIntents(action, game, a.me, a.clientID, info, cfg.grid, cfg.maxNeighbors);
       intents.push(...built.intents);
       invalid.push(built.invalid);
@@ -290,11 +296,11 @@ export class MultiAgentEnv {
     return ep.agents.map((a) => {
       a.maskInfo = a.eliminated
         ? {
-            mask: { spawn: false, expand: false, attackSlots: Array(this.cfg.maxNeighbors).fill(false) },
+            mask: emptyMask(this.cfg.maxNeighbors, this.cfg.grid.h * this.cfg.grid.w),
             slots: [],
             neighbors: [],
           }
-        : computeMaskInfo(ep.game, a.me, this.cfg.maxNeighbors);
+        : computeMaskInfo(ep.game, a.me, this.cfg.maxNeighbors, this.cfg.grid.h * this.cfg.grid.w);
       return buildObservation(ep.game, a.me, ctx, a.maskInfo);
     });
   }

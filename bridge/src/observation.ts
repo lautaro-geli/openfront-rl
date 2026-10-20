@@ -3,6 +3,7 @@
 import { PlayerType, Relation, UnitType } from "@openfront/engine-api/game/GameTypes";
 import type { Game, Player, Unit } from "@openfront/engine/game/Game";
 import type { MaskInfo } from "./actions";
+import { extendMask, unitRowsFrom } from "./mask";
 import {
   ALLY_ROWS,
   ATTACK_ROW_FEATURES,
@@ -666,7 +667,8 @@ export function buildObservation(game: Game, me: Player, ctx: ObsContext, info: 
     d[o + ATK.counterpart_row] = row !== undefined ? clip01(row / (PLAYER_ROWS - 1)) : 0;
     ar++;
   };
-  byTroops(outgoing).slice(0, MAX_ATTACKS_PER_SIDE).forEach((a) => addAttack(a, true));
+  const outSorted = byTroops(outgoing).slice(0, MAX_ATTACKS_PER_SIDE);
+  outSorted.forEach((a) => addAttack(a, true));
   byTroops(incoming).slice(0, MAX_ATTACKS_PER_SIDE).forEach((a) => addAttack(a, false));
 
   // --- Escalares de defensa y ataque -----------------------------------------------------------
@@ -778,6 +780,17 @@ export function buildObservation(game: Game, me: Player, ctx: ObsContext, info: 
   gs[GS.nations_alive] = clip01(frame.alive.filter((p) => p.type() === PlayerType.Nation).length / 50);
   gs[GS.spawn_immunity] = me.isImmune() ? 1 : 0;
   gs[GS.is_traitor] = me.isTraitor() ? 1 : 0;
+
+  // Máscara ampliada y filas para traducir las acciones.
+  info.rows = {
+    players: rows,
+    units: unitRowsFrom(
+      econUnits,
+      cands.slice(0, MAX_MIL_ROWS).map((c) => c.u),
+    ),
+    outgoing: outSorted,
+  };
+  extendMask(game, me, info.mask, info.rows, grid, cells);
 
   return {
     grid,

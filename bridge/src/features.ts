@@ -244,3 +244,61 @@ export const NUM_GLOBALS = GLOBAL_FEATURES.length;
 
 /** Bloques cuyos valores pueden ser negativos (razones con tanh, en [-1, 1]). */
 export const SIGNED_BLOCKS = ["players", "comparison"] as const;
+
+// --- Acciones (docs/specs/actions.md) ---------------------------------------------
+export const ACTION_DIMS = 6; // [kind, row, cell, fraction, type, aux]
+export const ACTION_KINDS = [
+  "noop",
+  "spawn",
+  "expand",
+  "attack",
+  "boat_attack",
+  "cancel_attack",
+  "cancel_boat",
+  "build",
+  "upgrade",
+  "delete_unit",
+  "nuke",
+  "move_warship",
+  "alliance_request",
+  "alliance_reject",
+  "alliance_break",
+  "alliance_extend",
+  "embargo_start",
+  "embargo_stop",
+  "embargo_all_start",
+  "embargo_all_stop",
+  "target_player",
+  "emoji",
+  "donate_gold",
+  "donate_troops",
+] as const;
+export type ActionKind = (typeof ACTION_KINDS)[number];
+export const NUM_KINDS = ACTION_KINDS.length;
+export const KIND = Object.fromEntries(ACTION_KINDS.map((n, i) => [n, i])) as Record<ActionKind, number>;
+
+/** Acciones con fila de jugador, en el orden del bloque `player` de la máscara. */
+export const PLAYER_KINDS = [
+  "attack",
+  "alliance_request",
+  "alliance_reject",
+  "alliance_break",
+  "alliance_extend",
+  "embargo_start",
+  "embargo_stop",
+  "target_player",
+  "emoji",
+  "donate_gold",
+  "donate_troops",
+] as const;
+/** Acciones con fila de unidad U (0..143), en el orden del bloque `unit`. */
+export const UNIT_KINDS = ["cancel_boat", "upgrade", "delete_unit", "move_warship"] as const;
+/** Acciones con celda, en el orden del bloque `cell`. */
+export const CELL_KINDS = ["spawn", "build", "build_ship", "nuke", "boat_attack", "move_warship"] as const;
+export const UNIT_ROWS = MAX_ECON_ROWS + MAX_MIL_ROWS; // 144
+export const BUILD_TYPES = ["city", "port", "factory", "post", "sam", "silo", "warship"] as const;
+export const NUKE_KINDS = ["atom", "hydrogen", "mirv"] as const;
+export const NUM_FRACTIONS = 5;
+export const NUM_EMOJIS = 8;
+/** Emojis (de la tabla del motor) que usan las naciones para reaccionar: `NationEmojiBehavior.ts:26-40`. */
+export const EMOJI_CHARS = ["👍", "🤝", "🎯", "😡", "😈", "🕊️", "🥺", "💀"] as const;

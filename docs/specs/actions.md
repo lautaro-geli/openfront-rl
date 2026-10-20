@@ -28,7 +28,7 @@
 | 4 | `boat_attack` | `cell`, `fraction` | `boat` | menos de `boatMaxNumber` (3) transportes; la celda tiene tierra ajena y costa | tile de tierra no propia de la celda con `canBuild(TransportShip, tile)` |
 | 5 | `cancel_attack` | `row` 0..7 (ataque saliente) | `cancel_attack` | el ataque existe, activo y no se está retirando | |
 | 6 | `cancel_boat` | `row` `U` | `cancel_boat` | fila de un transporte propio activo | |
-| 7 | `build` | `type` 0..6, `cell` | `build_unit` | tipo habilitado y oro ≥ coste; la celda tiene tierra propia (en el mar para `warship`; necesita puerto) | tile propio de la celda con `canBuild(type, tile)` |
+| 7 | `build` | `type` 0..6, `cell` | `build_unit` | tipo habilitado y oro ≥ coste; la celda tiene tierra propia; para `warship`, una celda de agua y un puerto propio terminado | tile propio de la celda con `canBuild(type, tile)` |
 | 8 | `upgrade` | `row` `U` | `upgrade_structure` | fila de estructura propia con `canUpgradeUnit` (ciudad, puerto, fábrica, SAM, silo) | |
 | 9 | `delete_unit` | `row` `U` | `delete_unit` | unidad propia en tierra propia, no en spawn, y `canDeleteUnit` | |
 | 10 | `nuke` | `type` 0..2, `cell` | `build_unit` con `AtomBomb`, `HydrogenBomb` o `MIRV` | oro ≥ coste; un silo listo; la celda tiene tierra no propia | objetivo: estructura enemiga de la celda, si no un tile ajeno, si no tierra; `canBuild` |
@@ -62,7 +62,7 @@ Acompaña a cada observación. Se calcula del mismo estado y se cachea hasta el 
 | `attack_row` | `[8]` | ataques salientes que se pueden cancelar |
 | `build_type` | `[7]` | estructuras que se pueden pagar y están habilitadas |
 | `nuke_type` | `[3]` | bombas que se pueden pagar con un silo listo |
-| `cell` | `[5, 2048]` | celdas válidas para `spawn`, `build`, `nuke`, `boat_attack`, `move_warship` |
+| `cell` | `[6, 2048]` | celdas válidas para `spawn`, `build` (estructuras en tierra propia), `build_ship` (agua, para `build` con `warship`), `nuke`, `boat_attack`, `move_warship` |
 
 Los campos antiguos `spawn`, `expand` y `attackSlots` se conservan.
 
