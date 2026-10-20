@@ -8,7 +8,8 @@
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "random": "tsx src/cli/runRandom.ts"
+    "random": "tsx src/cli/runRandom.ts",
+    "serve": "tsx src/server.ts"
   },
   "devDependencies": {
     "@types/node": "^24.12.0",
