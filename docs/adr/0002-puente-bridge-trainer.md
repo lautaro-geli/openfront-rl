@@ -1,6 +1,6 @@
 # ADR 0002: Mecanismo de comunicación bridge ⇄ trainer
 
-- **Estado**: propuesta (con datos de la Fase 0; falta validar la Opción 1 con una medición)
+- **Estado**: aceptada (2026-10-20); la medición se hace con la implementación (`docs/specs/protocol.md` §6)
 - **Fecha**: 2026-10-18
 
 ## Contexto
@@ -16,8 +16,13 @@ Datos relevantes:
 2. **Memoria compartida** para las capas espaciales. Más rápido; más complejo y frágil entre sistemas operativos.
 3. **Entrenar del lado TS** (política en ONNX u otra librería JS). Evita IPC, pero el ecosistema de RL en JS es pobre.
 
-## Decisión (propuesta)
-Opción 1. Un proceso Node aloja varios entornos y expone `reset(seed, config)`, `step(acciones)` y `close()`. La observación se construye **en TypeScript** (donde están los datos) y se envía ya reducida y como buffers binarios. Pasar a la Opción 2 solo si la medición muestra que el IPC domina.
+## Decisión
+Opción 1, con estas precisiones acordadas:
+- **Un proceso Node por partida**, lanzado por Python y comunicado por stdin/stdout con mensajes binarios con longitud. Python gestiona un entorno vectorizado con N procesos (por defecto núcleos − 1).
+- La observación se construye en TypeScript y viaja como **un buffer contiguo de `float32`** descrito por un manifiesto; Python lo corta con `numpy` sin copiar.
+- La acción es un **vector de 6 enteros**; el catálogo completo (24 tipos) está en `docs/specs/actions.md`.
+- La API de Python es multiagente (`reset()`/`step(acciones)` con listas) y encima un envoltorio Gymnasium de un agente.
+- Se pasa a la Opción 2 solo si la medición muestra que el IPC pasa del 20 % del tiempo por paso.
 
 ## Consecuencias
 - Fácil de depurar y de paralelizar con varios procesos Node.
