@@ -7,7 +7,6 @@ import { buildManifest, encodeResult, REQ, RES, resetResult } from "../src/proto
 import { vecToAction } from "../src/actions";
 import type { EnvConfig } from "../src/types";
 
-const TSX = path.resolve(__dirname, "../node_modules/tsx/dist/cli.mjs");
 const SERVER = path.resolve(__dirname, "../src/server.ts");
 
 /** Cliente mínimo del protocolo, solo para los tests. El cliente real es el de Python. */
@@ -19,7 +18,7 @@ class Client {
   stderr = "";
 
   constructor() {
-    this.proc = spawn(process.execPath, [TSX, SERVER], { cwd: path.resolve(__dirname, "..") });
+    this.proc = spawn(process.execPath, ["--import", "tsx", SERVER], { cwd: path.resolve(__dirname, "..") });
     this.proc.stderr.on("data", (d: Buffer) => (this.stderr += d.toString()));
     this.proc.stdout.on("data", (d: Buffer) => {
       this.buf = Buffer.concat([this.buf, d]);

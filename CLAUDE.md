@@ -9,7 +9,7 @@ Entrenar una política (PyTorch, PPO + self-play) que juegue partidas completas 
 - **Motor del juego**: OpenFront (TypeScript), como submódulo git en `vendor/openfront`. **SOLO LECTURA.**
 - **Bridge** (`bridge/`): TypeScript. Corre el motor en modo headless y expone estado y acciones.
 - **Trainer** (`trainer/`): Python 3.11+, PyTorch, Gymnasium. Entorno Gym, PPO y self-play.
-- **Comunicación bridge ⇄ trainer**: pendiente de decidir (ver `docs/adr/`).
+- **Comunicación bridge ⇄ trainer**: un proceso Node por partida por stdin/stdout binario (ADR 0002, `docs/specs/protocol.md`).
 
 ## Reglas (obligatorias)
 1. **Nunca modificar `vendor/`.** Si el motor necesita cambios, se envuelve desde `bridge/` o se documenta en un ADR.
@@ -24,9 +24,10 @@ Entrenar una política (PyTorch, PPO + self-play) que juegue partidas completas 
 ## Comandos
 > Se completarán cuando existan (actualizar este bloque en cada fase).
 - Typecheck bridge: `cd bridge && npm run typecheck`
-- Tests bridge: `cd bridge && npm test` (21 tests, ~3 min)
+- Tests bridge: `cd bridge && npm test` (33 tests, ~2-3 min)
 - Política aleatoria o heurística: `cd bridge && npm run random -- --policy heuristic --bots 20 --seed s --episodes 4`
-- Tests trainer: `cd trainer && pytest`
+- Tests trainer: `cd trainer && pytest` (8 tests contra el motor real; necesita Node 24, o `OPENFRONT_NODE`)
+- Medir velocidad: `cd trainer && PYTHONPATH=. python scripts/bench.py --workers 1 5 --map World --bots 400`
 - Entrenar: `cd trainer && python -m openfront_rl.train --config configs/ppo_base.yaml`
 
 ## Convenciones
@@ -46,7 +47,7 @@ Entrenar una política (PyTorch, PPO + self-play) que juegue partidas completas 
 - Instalar el motor con `npm ci --ignore-scripts` dentro de `vendor/openfront` (no `npm install`). `node_modules` queda ignorado por git.
 
 ## Estado actual
-**Fase 0 completada** (`docs/research/engine-findings.md`). **Fase 1, lado TypeScript hecho** (`bridge/`, `docs/specs/bridge.md`, `docs/research/phase1-results.md`): un agente o varios, observación v2 de 4 ramas (ADR 0006, `docs/specs/observations.md`) y política heurística como línea base. Siguiente: Fase 2, comunicación con Python y wrapper Gymnasium. ADRs 0002–0005 siguen en "propuesta".
+**Fases 0 y 1 hechas; Fase 2 hecha en el repo** (falta confirmar la velocidad en el PC del usuario). `bridge/`: observación v2 de 4 ramas (ADR 0006), 24 tipos de acción con máscara (`docs/specs/actions.md`) y servidor del protocolo. `trainer/openfront_rl/`: cliente, entorno en paralelo y Gymnasium. Siguiente: Fase 3, la red por ramas y PPO. ADRs 0003–0005 siguen en "propuesta"; 0002 y 0006 aceptadas.
 
 ## Trampa conocida
 `bridge/tsconfig.json` DEBE incluir `../vendor/openfront/packages/*/src/**/*`; si no, `tsx` transpila mal las clases del motor y falla en la primera partida (ver `bridge/README.md`).

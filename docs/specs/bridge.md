@@ -65,21 +65,16 @@ La definición completa (canales, tablas, escalares, normalización, fuentes en 
 
 Información pública: el motor entrega oro, tropas, estructuras, alianzas y ataques de todos los jugadores a cada cliente (`PlayerUpdate`, `GameUpdates.ts:237-282`), así que verlos no es trampa.
 
-## 5. Acciones (v0)
+## 5. Acciones (v1)
 
-| Acción | Parámetros | Intent del motor | Válida cuando |
-|---|---|---|---|
-| `noop` | | ninguno | siempre |
-| `spawn` | `cx, cy` (celda del grid) | `spawn` con un tile de tierra libre cercano al centro de la celda | solo en fase de spawn |
-| `expand` | `fraction` | `attack` con `targetID: null` | fuera de spawn, agente vivo, hay tropas |
-| `attack` | `slot`, `fraction` | `attack` con `targetID` = id del vecino en ese slot | fuera de spawn, el slot tiene un vecino con el que comparte frontera y `canAttackPlayer` es verdadero |
+El catálogo completo, con los 24 tipos, su vector `[kind, row, cell, fraction, type, aux]`, la máscara y los intents del motor, está en [`docs/specs/actions.md`](actions.md). Código: `bridge/src/actions.ts` (traducción) y `bridge/src/mask.ts` (máscara).
 
-- `fraction` ∈ {0.1, 0.25, 0.5, 0.75, 1.0}; las tropas enviadas son `fraction × tropas del agente`.
-- Slots: los jugadores vivos con frontera común con el agente, ordenados por tiles descendente y desempate por `smallID`; hasta `maxNeighbors`.
-- Una acción inválida se ejecuta como `noop` y se cuenta en `info.invalidAction = true`.
-- Si el tile de `spawn` no es válido, se busca el tile de tierra libre más cercano en espiral (determinista); si no hay ninguno, `noop`.
+Se conservan las acciones de la v0 con su forma original (`noop`, `spawn {cx,cy}`, `expand {fraction}`, `attack {slot,fraction}`) y la máscara antigua (`spawn`, `expand`, `attackSlots`).
 
-`mask`: `{ spawn: boolean, expand: boolean, attackSlots: boolean[maxNeighbors] }`.
+Una acción inválida o enmascarada se ejecuta como `noop` y se cuenta en `info.invalidAction = true`. Un tipo de acción desconocido (el protocolo no puede decodificarlo) también.
+
+## 5b. Conexión con Python
+Ver [`docs/specs/protocol.md`](protocol.md). Servidor: `bridge/src/server.ts`; cliente: `trainer/openfront_rl/client.py`.
 
 ## 6. Recompensa
 Según `docs/specs/reward.md`, con estos valores concretos:

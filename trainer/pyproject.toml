@@ -1,0 +1,12 @@
+[project]
+name = "openfront-rl"
+version = "0.1.0"
+description = "Agente de RL para OpenFront: cliente del bridge, entornos y entrenamiento"
+requires-python = ">=3.11"
+dependencies = ["numpy>=1.26", "gymnasium>=1.0"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]

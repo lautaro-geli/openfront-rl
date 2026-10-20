@@ -9,6 +9,8 @@ const { REQ, RES, buildManifest, encodeResult, resetResult } = await import("./p
 import type { MultiAgentEnv as Env } from "./multiEnv";
 
 let env: Env | null = null;
+// Tiempos acumulados por tipo de trabajo (se imprimen a stderr al cerrar si OPENFRONT_TIMINGS=1).
+const t = { steps: 0, engine: 0, encode: 0, bytes: 0 };
 const out = process.stdout;
 
 function send(type: number, body: Uint8Array = new Uint8Array(0)): void {
@@ -44,8 +46,16 @@ async function handle(type: number, body: Buffer): Promise<void> {
       }
       const v = new Int32Array(body.buffer.slice(body.byteOffset, body.byteOffset + body.length));
       const actions = Array.from({ length: A }, (_, i) => vecToAction(v.subarray(i * ACTION_DIMS, (i + 1) * ACTION_DIMS), env!.cfg.grid));
+      const t0 = performance.now();
       const r = env.step(actions);
-      send(RES.result, encodeResult(env.cfg, r, r.info[0]?.tick ?? 0));
+      const t1 = performance.now();
+      const bytes = encodeResult(env.cfg, r, r.info[0]?.tick ?? 0);
+      const t2 = performance.now();
+      send(RES.result, bytes);
+      t.steps++;
+      t.engine += t1 - t0;
+      t.encode += t2 - t1;
+      t.bytes = bytes.length;
       return;
     }
     case REQ.hash:
@@ -53,6 +63,11 @@ async function handle(type: number, body: Buffer): Promise<void> {
       sendText(RES.hash, env.stateHash());
       return;
     case REQ.close:
+      if (process.env.OPENFRONT_TIMINGS === "1" && t.steps > 0) {
+        console.error(
+          `timings: steps=${t.steps} engine_obs_ms=${(t.engine / t.steps).toFixed(2)} encode_ms=${(t.encode / t.steps).toFixed(3)} bytes=${t.bytes}`,
+        );
+      }
       env?.close();
       send(RES.closed);
       setImmediate(() => process.exit(0));

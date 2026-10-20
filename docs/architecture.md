@@ -68,8 +68,8 @@ flowchart TD
 | Fase | Entregable | Criterio de salida |
 |---|---|---|
 | 0 ✅ | Informe de investigación + ADRs 0002–0004 | Se sabe si es viable headless y a qué velocidad |
-| 1 🟡 | Partida completa headless con política aleatoria y heurística, uno o varios agentes (lado TS hecho: `bridge/`, ver `docs/research/phase1-results.md`) | Reproducible con semilla ✅. Falta medir en tu PC y el IPC con Python (pasa a Fase 2) |
-| 2 | `OpenFrontEnv` (Gymnasium) | Tests de contrato pasan |
+| 1 🟡 | Partida completa headless con política aleatoria y heurística, uno o varios agentes (lado TS hecho: `bridge/`, ver `docs/research/phase1-results.md`) | Reproducible con semilla ✅. Medido en el PC del usuario: 431 ticks/s con 20 bots en Britannia |
+| 2 ✅ | Cliente Python, entorno en paralelo y `OpenFrontEnv` (Gymnasium); servidor Node con 24 tipos de acción | 33 tests TS y 8 de Python pasan; el canal cuesta ~7 % del paso (medido en la nube). Falta medir en el PC |
 | 3 | Agente PPO | Curva de recompensa sube frente a bots simples |
 | 4 | Self-play y liga | Gana de forma consistente a checkpoints anteriores |
 | 5 | Evaluación y reportes | Métricas reproducibles |
