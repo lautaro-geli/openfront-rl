@@ -63,6 +63,9 @@ def stack_obs(results: list[Any]) -> tuple[dict[str, np.ndarray], dict[str, np.n
     return obs, mask
 
 
+ABBR = {"territory": "terr", "attack": "atq", "economy": "eco", "defense": "def", "terminal": "fin"}
+
+
 class Runner:
     """Juega N partidas a la vez con la política y llena el buffer."""
 
@@ -227,7 +230,7 @@ def train(cfg: dict[str, Any], run_dir: str | Path | None = None, resume: str | 
                 mf.write(json.dumps(row) + "\n")
                 mf.flush()
                 if log:
-                    pr = " ".join(f"{k[:3]}={row[f'ep_part_{k}']:+.3f}" for k in runner.parts if f"ep_part_{k}" in row)
+                    pr = " ".join(f"{ABBR.get(k, k[:4])}={row[f'ep_part_{k}']:+.3f}" for k in runner.parts if f"ep_part_{k}" in row)
                     print(f"[{u}/{total}] steps={steps} r/step={row['step_reward_mean']:+.4f} "
                           f"ep_ret={row.get('ep_return', float('nan')):+.3f} ({pr}) ent={stats['ent']:.2f} kl={stats['kl']:.4f} "
                           f"inv={info['invalid_rate']:.2f} noop={row['noop_frac']:.2f} "

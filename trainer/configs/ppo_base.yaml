@@ -19,7 +19,7 @@ env:
   grid: {h: 32, w: 64}
   samples: 4
   rewardTerritoryWeight: 0.40
-  rewardAttackWeight: 0.15
+  rewardAttackWeight: 0.12
   rewardEconomyWeight: 0.10
   rewardDefenseWeight: 0.05
 model: {}

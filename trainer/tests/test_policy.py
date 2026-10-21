@@ -9,7 +9,7 @@ from openfront_rl.model import Policy, ModelConfig, to_tensors  # noqa: E402
 from openfront_rl.ppo import PPOConfig, RolloutBuffer, ppo_update  # noqa: E402
 from openfront_rl.train import load_config, stack_obs, train  # noqa: E402
 
-CFG = {"agents": 1, "bots": 8, "maxTicks": 1500, "rewardAttackWeight": 0.15, "rewardEconomyWeight": 0.1, "rewardDefenseWeight": 0.05}
+CFG = {"agents": 1, "bots": 8, "maxTicks": 1500, "rewardAttackWeight": 0.12, "rewardEconomyWeight": 0.1, "rewardDefenseWeight": 0.05}
 
 
 def play(policy, steps, seed="pol-1"):
@@ -118,7 +118,7 @@ def test_entrenamiento_corto_guarda_config_y_checkpoint(tmp_path):
         "name": "humo", "seed": 3, "workers": 2, "rollout_steps": 8, "updates": 2, "checkpoint_every": 1,
         "eval": {"every": 0, "episodes": 1}, "ppo": {"minibatch": 8, "epochs": 1},
         "env": {"bots": 5, "maxTicks": 800, "difficulty": "Easy", "nations": "disabled",
-                "rewardAttackWeight": 0.15, "rewardEconomyWeight": 0.1, "rewardDefenseWeight": 0.05},
+                "rewardAttackWeight": 0.12, "rewardEconomyWeight": 0.1, "rewardDefenseWeight": 0.05},
     })
     run = train(cfg, tmp_path / "run", log=False)
     assert (run / "config.yaml").exists() and (run / "metrics.jsonl").exists() and (run / "latest.pt").exists()

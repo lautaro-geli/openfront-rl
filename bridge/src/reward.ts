@@ -22,7 +22,7 @@ export interface RewardState {
 
 const INCOME_EMA = 0.95;
 const WIN_FRAC = 0.8;
-const BASE_TROOPS = 100_000;
+const CITY_TROOPS_FULL = 1_000_000;
 const BASE_GOLD_RATE = 100;
 
 export const newRewardState = (): RewardState => ({
@@ -39,9 +39,13 @@ const logScale = (x: number, base: number, factor: number): number => clip01(Mat
 
 const finished = (me: Player, t: UnitType): number => me.units(t).filter((u) => u.isActive() && !u.isUnderConstruction()).length;
 
-/** Potencial de ataque: capacidad máxima de tropas (incluye ciudades) y silos terminados (spec §2). */
+/**
+ * Potencial de ataque: tropas máximas que aportan las ciudades terminadas y silos terminados (spec §2). No usa el tope
+ * total de tropas porque crece con el territorio y premiaría dos veces lo mismo.
+ */
 export function attackPotential(game: Game, me: Player): number {
-  const troops = logScale(game.config().maxTroops(me), BASE_TROOPS, 20);
+  const cfg = game.config();
+  const troops = clip01((cfg.maxTroops(me) - cfg.maxTroopsWithoutCities(me)) / CITY_TROOPS_FULL);
   const silos = Math.min(1, finished(me, UnitType.MissileSilo) / 2);
   return 0.8 * troops + 0.2 * silos;
 }

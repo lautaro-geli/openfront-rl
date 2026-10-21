@@ -36,14 +36,14 @@ describe("recompensa por componentes", () => {
   }, 120000);
 
   it("con todas las categorías activas las partes son reproducibles y respetan su presupuesto", async () => {
-    const cfg = { ...BASE, rewardTerritoryWeight: 0.4, rewardAttackWeight: 0.15, rewardEconomyWeight: 0.1, rewardDefenseWeight: 0.05 };
+    const cfg = { ...BASE, rewardTerritoryWeight: 0.4, rewardAttackWeight: 0.12, rewardEconomyWeight: 0.1, rewardDefenseWeight: 0.05 };
     const a = await play(cfg, "rw-2");
     const b = await play(cfg, "rw-2");
     expect(a.hash).toBe(b.hash);
     for (const k of REWARD_PARTS) expect(a.totals[k]).toBe(b.totals[k]);
     // Telescópicas: el acumulado de cada categoría está en [−peso, +peso].
     expect(Math.abs(a.totals.territory)).toBeLessThanOrEqual(0.4 + 1e-6);
-    expect(Math.abs(a.totals.attack)).toBeLessThanOrEqual(0.15 + 1e-6);
+    expect(Math.abs(a.totals.attack)).toBeLessThanOrEqual(0.12 + 1e-6);
     expect(Math.abs(a.totals.economy)).toBeLessThanOrEqual(0.1 + 1e-6);
     expect(Math.abs(a.totals.defense)).toBeLessThanOrEqual(0.05 + 1e-6);
     expect(a.maxSecAbs).toBeLessThanOrEqual(0.05 + 1e-9);
