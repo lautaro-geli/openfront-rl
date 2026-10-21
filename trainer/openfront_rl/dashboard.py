@@ -31,7 +31,7 @@ except ImportError:  # pragma: no cover
 TRAINER_DIR = Path(__file__).resolve().parent.parent
 WEB_DIR = Path(__file__).resolve().parent / "web"
 NAME_RE = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
-LAUNCH_KEYS = {"config", "name", "seed", "workers", "episodes", "updates", "resume", "env"}
+LAUNCH_KEYS = {"config", "name", "seed", "workers", "episodes", "updates", "resume", "env", "rewards"}
 ENV_KEYS = {"map", "bots", "nations", "difficulty"}
 DIFFICULTIES = ("Easy", "Medium", "Hard", "Impossible")
 MAPS = ("Britannia", "World")
@@ -176,7 +176,42 @@ class Panel:
         if name not in self.configs():
             raise ApiError(404, "config desconocida")
         cfg = yaml.safe_load((self.configs_dir / name).read_text(encoding="utf8")) or {}
-        return {"env": cfg.get("env", {}), "maps": list(MAPS), "difficulties": list(DIFFICULTIES)}
+        env = cfg.get("env", {})
+        cq = cfg.get("conquest") or {}
+        rewards = {"territory": env.get("rewardTerritoryWeight", 0.8), "attack": env.get("rewardAttackWeight", 0.0),
+                   "economy": env.get("rewardEconomyWeight", 0.0), "defense": env.get("rewardDefenseWeight", 0.0),
+                   "conquest_budget": cq.get("budget", 0.0), "conquest_until": cq.get("until", 0.5)}
+        return {"env": env, "rewards": rewards, "maps": list(MAPS), "difficulties": list(DIFFICULTIES)}
+
+    REWARD_ENV = {"territory": "rewardTerritoryWeight", "attack": "rewardAttackWeight", "economy": "rewardEconomyWeight", "defense": "rewardDefenseWeight"}
+
+    @classmethod
+    def reward_args(cls, rewards: Any) -> list[str]:
+        """Valida `rewards` (presupuestos y bonus de conquista) y lo pasa a `train.py` (dashboard.md §4b')."""
+        if rewards is None:
+            return []
+        allowed = {*cls.REWARD_ENV, "conquest_budget", "conquest_until"}
+        if not isinstance(rewards, dict) or set(rewards) - allowed:
+            raise ApiError(400, f"rewards solo admite {sorted(allowed)}")
+        vals: dict[str, float] = {}
+        for k, v in rewards.items():
+            if v is None or v == "":
+                continue
+            if isinstance(v, bool) or not isinstance(v, (int, float)) or v != v:
+                raise ApiError(400, f"{k} debe ser un número")
+            lo_ok = v > 0 if k == "conquest_until" else v >= 0
+            if not lo_ok or v > 1:
+                raise ApiError(400, f"{k} debe estar entre 0 y 1" + (" (mayor que 0)" if k == "conquest_until" else ""))
+            vals[k] = float(v)
+        if sum(v for k, v in vals.items() if k != "conquest_until") >= 1:
+            raise ApiError(400, "la suma de los presupuestos debe ser menor que 1: ganar (±1) tiene que pesar más")
+        out: list[str] = []
+        for k, v in vals.items():
+            if k in cls.REWARD_ENV:
+                out += ["--env", f"{cls.REWARD_ENV[k]}={v}"]
+            else:
+                out += [f"--{k.replace('_', '-')}", str(v)]
+        return out
 
     @staticmethod
     def env_args(env: Any) -> list[str]:
@@ -229,6 +264,7 @@ class Panel:
                     raise ApiError(400, f"{key} debe ser un entero válido")
                 args += [flag, str(body[key])]
         args += self.env_args(body.get("env"))
+        args += self.reward_args(body.get("rewards"))
         name = str(body.get("name") or f"{cfg.get('name', 'run')}-{seed}")
         if not NAME_RE.match(name):
             raise ApiError(400, "nombre de run inválido")

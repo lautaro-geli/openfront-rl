@@ -206,3 +206,14 @@ def test_bonus_de_conquista_decae_hasta_cero():
     assert conquest_weight(cfg, 0.25) == pytest.approx(0.005)
     assert conquest_weight(cfg, 0.5) == 0.0 and conquest_weight(cfg, 1.0) == 0.0
     assert conquest_weight({"env": {"bots": 20}, "conquest": {"budget": 0}}, 0.0) == 0.0
+
+
+def test_recompensas_editables_se_validan_y_se_pasan_a_train(panel):
+    assert panel.config_env("mini.yaml")["rewards"].keys() >= {"territory", "attack", "economy", "defense", "conquest_budget", "conquest_until"}
+    a = panel.reward_args({"territory": 0.5, "attack": 0.1, "conquest_budget": 0.2, "conquest_until": 0.4})
+    assert a == ["--env", "rewardTerritoryWeight=0.5", "--env", "rewardAttackWeight=0.1", "--conquest-budget", "0.2", "--conquest-until", "0.4"]
+    for bad in ({"territory": 0.9, "attack": 0.2}, {"territory": -0.1}, {"territory": "x"}, {"conquest_until": 0}, {"conquest_until": 1.5}, {"otra": 0.1}):
+        with pytest.raises(ApiError):
+            panel.reward_args(bad)
+    from openfront_rl.train import parse_env
+    assert parse_env(["rewardAttackWeight=0.12"]) == {"rewardAttackWeight": 0.12}

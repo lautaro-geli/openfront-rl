@@ -241,6 +241,13 @@ def archive_previous(run: Path) -> Path | None:
     return dest
 
 
+def _float_or_text(v: str) -> float | str:
+    try:
+        return float(v)
+    except ValueError:
+        return v
+
+
 def parse_env(items: list[str]) -> dict[str, Any]:
     """`--env bots=30 --env nations=disabled`: valores numéricos como número, el resto como texto."""
     out: dict[str, Any] = {}
@@ -248,7 +255,7 @@ def parse_env(items: list[str]) -> dict[str, Any]:
         k, sep, v = it.partition("=")
         if not sep or not k:
             raise SystemExit(f"--env espera clave=valor, recibí {it!r}")
-        out[k] = int(v) if v.lstrip("-").isdigit() else v
+        out[k] = int(v) if v.lstrip("-").isdigit() else _float_or_text(v)
     return out
 
 
@@ -406,10 +413,15 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--workers", type=int, default=None)
     ap.add_argument("--seed", type=int, default=None)
     ap.add_argument("--env", action="append", default=[], metavar="CLAVE=VALOR", help="cambia el escenario (map, bots, nations, difficulty); se puede repetir")
+    ap.add_argument("--conquest-budget", type=float, default=None, help="bonus máximo por tribus conquistadas (reward.md §9)")
+    ap.add_argument("--conquest-until", type=float, default=None, help="progreso del run en que el bonus llega a 0")
     a = ap.parse_args(argv)
     over: dict[str, Any] = {k: v for k, v in (("updates", a.updates), ("episodes", a.episodes), ("workers", a.workers), ("seed", a.seed)) if v is not None}
     if a.env:
         over["env"] = parse_env(a.env)
+    cq = {k: v for k, v in (("budget", a.conquest_budget), ("until", a.conquest_until)) if v is not None}
+    if cq:
+        over["conquest"] = cq
     train(load_config(a.config, over), a.run_dir, a.resume)
 
 

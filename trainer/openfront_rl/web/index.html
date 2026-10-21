@@ -102,6 +102,7 @@ function draw(cv, leg, series, opts) {
 const col = (name, label) => ({name: label, pts: metrics.filter(r => typeof r[name] === "number").map(r => ({x: r.update, y: r[name]}))});
 
 /* ---------- pantallas ---------- */
+const RW = [["territory", "Territorio"], ["attack", "Poder de ataque"], ["economy", "Economía"], ["defense", "Defensa"], ["conquest_budget", "Bonus tribus (máx.)"], ["conquest_until", "Bonus tribus: llega a 0 en (progreso 0–1)"]];
 async function viewProcesos(m) {
   const [runs, cfgs] = await Promise.all([api("/runs"), api("/configs")]);
   const err = h("div", {class: "err"});
@@ -110,6 +111,7 @@ async function viewProcesos(m) {
     const d = Object.fromEntries(new FormData(f));
     const body = {config: d.config}; if (d.name) body.name = d.name;
     const env = {map: d.map, difficulty: d.difficulty, bots: parseInt(d.bots, 10), nations: d.nations_mode === "number" ? parseInt(d.nations_n, 10) : d.nations_mode};
+    body.rewards = Object.fromEntries(RW.map(([k]) => [k, parseFloat(d["rw_" + k])]).filter(([, v]) => !Number.isNaN(v)));
     body.env = Object.fromEntries(Object.entries(env).filter(([, v]) => v !== "" && !Number.isNaN(v)));
     for (const k of ["seed", "workers", "episodes"]) if (d[k] !== "") body[k] = parseInt(d[k], 10);
     if (d.resume) body.resume = true;
@@ -128,12 +130,20 @@ async function viewProcesos(m) {
       h("label", {}, "Cantidad de naciones", h("input", {name: "nations_n", type: "number", min: 1, max: 100})),
       h("label", {}, "Nivel de las naciones", h("select", {name: "difficulty"}, ["Easy", "Medium", "Hard", "Impossible"].map(x => h("option", {value: x}, x)))),
       h("small", {id: "scn", class: "muted"}, "")),
+    h("fieldset", {class: "box", style: "flex:1 1 100%"}, h("legend", {}, "Recompensas (presupuesto máximo de cada categoría; la suma debe ser menor que 1)"),
+      RW.map(([k, t]) => h("label", {}, t, h("input", {name: "rw_" + k, type: "number", min: 0, max: 1, step: 0.01, oninput: sumRewards}))),
+      h("small", {id: "rwsum", class: "muted"}, "")),
     h("button", {class: "pri", type: "submit"}, "Lanzar"));
+  function sumRewards() {
+    const t = RW.filter(([k]) => k !== "conquest_until").reduce((a, [k]) => a + (parseFloat(f.elements["rw_" + k].value) || 0), 0);
+    const el = f.querySelector("#rwsum"); el.textContent = `Suma de presupuestos: ${t.toFixed(2)} ${t < 1 ? "(ok, ganar pesa más)" : "(demasiado: tiene que ser menor que 1)"}`; el.style.color = t < 1 ? "" : "#c0392b";
+  }
   const loadScenario = async c => {
     try {
-      const e = (await api(`/configs/${c}`)).env || {};
+      const cfgInfo = await api(`/configs/${c}`); const e = cfgInfo.env || {};
       const set = (n, v) => { if (f.elements[n] && v !== undefined) f.elements[n].value = v; };
       set("map", e.map); set("bots", e.bots); set("difficulty", e.difficulty);
+      const rw = cfgInfo.rewards || {}; RW.forEach(([k]) => set("rw_" + k, rw[k])); sumRewards();
       const n = e.nations ?? "default";
       set("nations_mode", typeof n === "number" ? "number" : n); set("nations_n", typeof n === "number" ? n : "");
       f.querySelector("#scn").textContent = "El nivel lo usan solo las naciones (ritmo de ataque, alianzas); las tribus no lo usan, así que sin naciones casi no influye.";
