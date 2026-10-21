@@ -108,7 +108,7 @@ async function viewProcesos(m) {
     ev.preventDefault(); err.textContent = "";
     const d = Object.fromEntries(new FormData(f));
     const body = {config: d.config}; if (d.name) body.name = d.name;
-    for (const k of ["seed", "workers", "updates"]) if (d[k] !== "") body[k] = parseInt(d[k], 10);
+    for (const k of ["seed", "workers", "episodes"]) if (d[k] !== "") body[k] = parseInt(d[k], 10);
     if (d.resume) body.resume = true;
     try { const r = await api("/runs", body); run = r.name; tab = "run"; metrics = []; lastUpdate = 0; nav(); render(); } catch (e) { err.textContent = e.message; }
   }},
@@ -116,13 +116,13 @@ async function viewProcesos(m) {
     h("label", {}, "Nombre (opcional)", h("input", {name: "name", placeholder: "auto"})),
     h("label", {}, "Semilla", h("input", {name: "seed", type: "number", min: 0, placeholder: "config"})),
     h("label", {}, "Workers", h("input", {name: "workers", type: "number", min: 1, placeholder: "2"})),
-    h("label", {}, "Actualizaciones", h("input", {name: "updates", type: "number", min: 1, placeholder: "config"})),
+    h("label", {}, "Partidas", h("input", {name: "episodes", type: "number", min: 1, placeholder: "config"})),
     h("label", {}, "Reanudar", h("input", {name: "resume", type: "checkbox"})),
     h("button", {class: "pri", type: "submit"}, "Lanzar"));
   const act = (name, cmd, label, cls = "") => h("button", {class: "b " + cls, onclick: async () => { try { await (cmd === "kill" ? api(`/runs/${name}/kill`, {}) : api(`/runs/${name}/control`, {command: cmd})); } catch (e) { alert(e.message); } render(); }}, label);
-  const tbl = h("table", {}, h("thead", {}, h("tr", {}, ["Run", "Estado", "Actualización", "Pasos/s", "Retorno", "CPU PC %", "Mem MB", "Procesos", ""].map(t => h("th", {}, t)))),
+  const tbl = h("table", {}, h("thead", {}, h("tr", {}, ["Run", "Estado", "Partidas", "Pasos/s", "Retorno", "CPU PC %", "Mem MB", "Procesos", ""].map(t => h("th", {}, t)))),
     h("tbody", {}, runs.map(r => h("tr", {}, h("td", {}, h("a", {href: "#", onclick: e => { e.preventDefault(); run = r.name; tab = "run"; metrics = []; lastUpdate = 0; nav(); render(); }}, r.name)), h("td", {}, pill(r.state)),
-      h("td", {}, r.total ? `${r.update}/${r.total}` : r.update), h("td", {}, fmt(r.steps_per_s, 0)), h("td", {}, fmt(r.ep_return, 3)), h("td", {}, fmt(r.cpu, 0)), h("td", {}, fmt(r.mem_mb, 0)), h("td", {}, r.procs ?? "–"),
+      h("td", {}, r.episodes_total ? `${r.episodes_done ?? 0}/${r.episodes_total}` : (r.total ? `${r.update}/${r.total} act.` : `${r.update} act.`)), h("td", {}, fmt(r.steps_per_s, 0)), h("td", {}, fmt(r.ep_return, 3)), h("td", {}, fmt(r.cpu, 0)), h("td", {}, fmt(r.mem_mb, 0)), h("td", {}, r.procs ?? "–"),
       h("td", {}, r.state === "running" ? [act(r.name, "pause", "Pausar"), " ", act(r.name, "stop", "Detener"), " ", act(r.name, "kill", "Matar", "red")] : r.state === "paused" ? [act(r.name, "run", "Reanudar"), " ", act(r.name, "stop", "Detener"), " ", act(r.name, "kill", "Matar", "red")] : r.state === "caído" ? "" : "")))));
   m.replaceChildren(h("div", {class: "card"}, h("h2", {}, "Lanzar entrenamiento"), f, err),
     h("div", {class: "card"}, h("h2", {}, "Procesos"), runs.length ? h("div", {class: "scroll"}, tbl) : h("span", {class: "muted"}, "Todavía no hay runs.")),
@@ -134,18 +134,19 @@ async function viewRun(m) {
   const [st, rows, log] = await Promise.all([api(`/runs/${run}/status`), api(`/runs/${run}/metrics?since=${lastUpdate}`), api(`/runs/${run}/log?tail=60`)]);
   metrics = metrics.concat(rows); if (metrics.length) lastUpdate = metrics[metrics.length - 1].update;
   const s = st.status || {}, u = st.usage || {};
-  const prog = s.total ? Math.min(100, 100 * (s.update || 0) / s.total) : 0;
+  const prog = s.episodes_total ? Math.min(100, 100 * (s.episodes_done || 0) / s.episodes_total) : s.total ? Math.min(100, 100 * (s.update || 0) / s.total) : 0;
   const stat = (k, v) => h("div", {class: "stat"}, h("div", {class: "v"}, v), h("div", {class: "k"}, k));
-  const workers = (s.workers || []).map(w => h("div", {class: "box"}, h("b", {}, "Worker " + (w.i + 1)), h("small", {}, `tick ${w.tick} · episodio ${w.ep_len} pasos`),
-    h("div", {}, `ataques ${fmt(w.events?.attack_orders, 0)} · a tribus ${fmt(w.events?.attack_tribe_orders, 0)} · tribus conquistadas ${fmt(w.events?.tribes_conquered, 0)} · misiles ${fmt(w.events?.nuke_orders, 0)}`)));
+  const wbtn = w => h("button", {class: "b", style: "margin-top:6px", onclick: async () => { try { await api(`/runs/${run}/workers`, {worker: w.i, paused: !w.paused}); } catch (e) { alert(e.message); } render(); }}, w.paused ? "Reanudar worker" : "Pausar worker");
+  const workers = (s.workers || []).map(w => h("div", {class: "box", style: w.paused ? "opacity:.6" : ""}, h("b", {}, "Worker " + (w.i + 1) + (w.paused ? " · en pausa" : "")), h("small", {}, `tick ${w.tick} · episodio ${w.ep_len} pasos`),
+    h("div", {}, `ataques ${fmt(w.events?.attack_orders, 0)} · a tribus ${fmt(w.events?.attack_tribe_orders, 0)} · tribus conquistadas ${fmt(w.events?.tribes_conquered, 0)} · misiles ${fmt(w.events?.nuke_orders, 0)}`), ["running", "paused"].includes(st.state) ? wbtn(w) : ""));
   const sp = []; for (let i = 1; i < metrics.length; i++) { const a = metrics[i - 1], b = metrics[i]; if (b.time > a.time) sp.push({x: b.update, y: (b.steps - a.steps) / (b.time - a.time)}); }
   const ents = ["ep_ev_attack_orders", "ep_ev_attack_tribe_orders", "ep_ev_tribes_conquered", "ep_ev_nuke_orders", "ep_ev_build_orders"];
   const labels = ["ataques", "ataques a tribus", "tribus conquistadas", "misiles", "construcciones"];
   m.replaceChildren(
     h("div", {class: "card"}, h("div", {class: "row"}, h("div", {class: "box"}, h("b", {}, run), pill(st.state), " ", st.state === "running" ? h("button", {class: "b", onclick: () => api(`/runs/${run}/control`, {command: "pause"}).then(render)}, "Pausar") : st.state === "paused" ? h("button", {class: "b", onclick: () => api(`/runs/${run}/control`, {command: "run"}).then(render)}, "Reanudar") : ""),
-      h("div", {class: "box grid"}, stat("Actualización", s.total ? `${s.update}/${s.total}` : fmt(s.update, 0)), stat("Pasos totales", fmt(s.steps, 0)), stat("Pasos/s", fmt(s.steps_per_s, 0)), stat("CPU de la PC %", fmt(u.cpu, 0)), stat("Memoria MB", fmt(u.mem_mb, 0)))),
+      h("div", {class: "box grid"}, stat("Partidas", s.episodes_total ? `${s.episodes_done ?? 0}/${s.episodes_total}` : "–"), stat("Actualización", s.total ? `${s.update}/${s.total}` : fmt(s.update, 0)), stat("Pasos totales", fmt(s.steps, 0)), stat("Pasos/s", fmt(s.steps_per_s, 0)), stat("CPU de la PC %", fmt(u.cpu, 0)), stat("Memoria MB", fmt(u.mem_mb, 0)))),
       h("div", {class: "bar", style: "margin-top:10px"}, h("i", {style: `width:${prog}%`}))),
-    h("div", {class: "card"}, h("h2", {}, "Workers (partida en curso de cada uno)"), workers.length ? h("div", {class: "row"}, workers) : h("span", {class: "muted"}, "sin datos todavía")),
+    h("div", {class: "card"}, h("h2", {}, "Workers (partida en curso de cada uno; se aplica al empezar la próxima actualización)"), workers.length ? h("div", {class: "row"}, workers) : h("span", {class: "muted"}, "sin datos todavía")),
     h("div", {class: "charts"},
       chart("Retorno por episodio (suma de componentes)", [col("ep_return", "retorno")]),
       chart("Retorno por componente", ["territory", "attack", "economy", "defense", "terminal"].map((k, i) => col("ep_part_" + k, ["territorio", "ataque", "economía", "defensa", "fin"][i]))),

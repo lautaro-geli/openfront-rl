@@ -36,6 +36,7 @@ class VecGame:
         self.manifest = self.games[0].manifest
         self._episode = [0] * self.n
         self.final: list[Result | None] = [None] * self.n
+        self._last: list[Result] = []
 
     def _seed(self, i: int) -> str:
         return f"{self.base_seed}-{i}-{self._episode[i]}"
@@ -44,23 +45,28 @@ class VecGame:
         self._episode = [0] * self.n
         for i, g in enumerate(self.games):
             g.send_reset(self._seed(i))
-        return [g.recv_result() for g in self.games]
+        self._last = [g.recv_result() for g in self.games]
+        return list(self._last)
 
-    def step(self, actions: np.ndarray) -> list[Result]:
-        """`actions`: [N, agentes, 6]."""
-        for g, a in zip(self.games, actions):
-            g.send_step(a)
-        results = [g.recv_result() for g in self.games]
+    def step(self, actions: np.ndarray, active: np.ndarray | None = None) -> list[Result]:
+        """`actions`: [N, agentes, 6]. Las partidas con `active[i]` falso no avanzan: su proceso queda en espera y se
+        devuelve su último resultado (docs/specs/dashboard.md §5)."""
+        act = [True] * self.n if active is None else [bool(x) for x in active]
+        for i, (g, a) in enumerate(zip(self.games, actions)):
+            if act[i]:
+                g.send_step(a)
+        results = [g.recv_result() if act[i] else self._last[i] for i, g in enumerate(self.games)]
         self.final = [None] * self.n
         if self.auto_reset:
             for i, r in enumerate(results):
-                if r.done:
+                if act[i] and r.done:
                     self.final[i] = r
                     self._episode[i] += 1
                     self.games[i].send_reset(self._seed(i))
             for i, r in enumerate(results):
-                if r.done:
+                if act[i] and r.done:
                     results[i] = self.games[i].recv_result()
+        self._last = list(results)
         return results
 
     def close(self) -> None:

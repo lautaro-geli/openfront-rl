@@ -31,7 +31,7 @@ except ImportError:  # pragma: no cover
 TRAINER_DIR = Path(__file__).resolve().parent.parent
 WEB_DIR = Path(__file__).resolve().parent / "web"
 NAME_RE = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
-LAUNCH_KEYS = {"config", "name", "seed", "workers", "updates", "resume"}
+LAUNCH_KEYS = {"config", "name", "seed", "workers", "episodes", "updates", "resume"}
 STALE_S = 180.0  # un run "running" sin actualizar tanto tiempo se muestra como caído si su proceso no existe
 
 
@@ -105,6 +105,7 @@ class Panel:
             out.append({
                 "name": d.name, "state": self.state_of(status, p is not None),
                 "update": (status or {}).get("update", last.get("update", 0)), "total": (status or {}).get("total"),
+                "episodes_done": (status or {}).get("episodes_done", last.get("episodes_done")), "episodes_total": (status or {}).get("episodes_total"),
                 "steps": (status or {}).get("steps", last.get("steps", 0)), "steps_per_s": (status or {}).get("steps_per_s"),
                 "ep_return": last.get("ep_return"), "ent": last.get("ent"),
                 **(self._usage(p) if p is not None else {}),
@@ -146,7 +147,7 @@ class Panel:
         st = runctl.read_json(d / "status.json")
         p = self._proc(st)
         return {"status": st, "state": self.state_of(st, p is not None), "usage": self._usage(p) if p is not None else None,
-                "control": runctl.read_command(d), "config": yaml.safe_load((d / "config.yaml").read_text(encoding="utf8")) if (d / "config.yaml").exists() else None}
+                "control": runctl.read_command(d), "paused_workers": runctl.read_control(d)[1], "config": yaml.safe_load((d / "config.yaml").read_text(encoding="utf8")) if (d / "config.yaml").exists() else None}
 
     def architecture(self, name: str) -> dict[str, Any]:
         return runctl.read_json(self.run_dir(name) / "architecture.json") or {}
@@ -183,7 +184,7 @@ class Panel:
         cfg = yaml.safe_load((self.configs_dir / cfg_name).read_text(encoding="utf8")) or {}
         args = [sys.executable, "-m", "openfront_rl.train", "--config", str(self.configs_dir / cfg_name)]
         seed = body.get("seed", cfg.get("seed", 0))
-        for key, flag in (("seed", "--seed"), ("workers", "--workers"), ("updates", "--updates")):
+        for key, flag in (("seed", "--seed"), ("workers", "--workers"), ("episodes", "--episodes"), ("updates", "--updates")):
             if key in body and body[key] is not None:
                 if not isinstance(body[key], int) or isinstance(body[key], bool) or body[key] < (0 if key == "seed" else 1):
                     raise ApiError(400, f"{key} debe ser un entero válido")
@@ -200,7 +201,7 @@ class Panel:
         if self._proc(st) is not None:
             raise ApiError(409, f"el run {name} ya está en ejecución")
         d.mkdir(parents=True, exist_ok=True)
-        runctl.write_json(d / "control.json", {"command": "run"})
+        runctl.write_json(d / "control.json", {"command": "run", "paused_workers": []})
         args += ["--run-dir", str(d)]
         log = open(d / "train.log", "ab")
         flags = getattr(subprocess, "CREATE_NO_WINDOW", 0)
@@ -215,8 +216,19 @@ class Panel:
     def control(self, name: str, command: str) -> dict[str, str]:
         if command not in ("run", "pause", "stop"):
             raise ApiError(400, "command debe ser run, pause o stop")
-        runctl.write_json(self.run_dir(name) / "control.json", {"command": command})
+        runctl.write_control(self.run_dir(name), command=command)
         return {"command": command}
+
+    def set_worker_paused(self, name: str, worker: Any, paused: Any) -> dict[str, Any]:
+        d = self.run_dir(name)
+        st = runctl.read_json(d / "status.json") or {}
+        n = len(st.get("workers") or [])
+        if not isinstance(worker, int) or isinstance(worker, bool) or not 0 <= worker < max(n, 1) or not isinstance(paused, bool):
+            raise ApiError(400, "worker debe ser un índice válido y paused un booleano")
+        cur = set(runctl.read_control(d)[1])
+        cur.add(worker) if paused else cur.discard(worker)
+        runctl.write_control(d, paused_workers=sorted(cur))
+        return {"paused_workers": sorted(cur)}
 
     def kill(self, name: str) -> dict[str, Any]:
         d = self.run_dir(name)
@@ -287,6 +299,8 @@ def make_handler(panel: Panel):
                         return self._json({"log": panel.log(name, int(q.get("tail", 200)))})
                     if method == "POST" and what == "control":
                         return self._json(panel.control(name, str(body.get("command"))))
+                    if method == "POST" and what == "workers":
+                        return self._json(panel.set_worker_paused(name, body.get("worker"), body.get("paused")))
                     if method == "POST" and what == "kill":
                         return self._json(panel.kill(name))
                 raise ApiError(404, "no existe")

@@ -34,7 +34,8 @@ DEFAULTS: dict[str, Any] = {
     "torch_threads": None,  # None = núcleos físicos − 2 (mín. 1): deja dos núcleos libres a la PC
     "low_priority": True,  # entrenamiento y procesos Node con prioridad por debajo de lo normal: la PC sigue usable
     "rollout_steps": 128,
-    "updates": 1000,
+    "updates": 1000,  # límite en actualizaciones; se ignora si `episodes` está definido
+    "episodes": None,  # duración del run en partidas de entrenamiento terminadas (None = usar `updates`)
     "checkpoint_every": 25,
     "eval": {"every": 50, "episodes": 5},
     "env": {},
@@ -96,9 +97,11 @@ class Runner:
         return self.policy(ob, mk, greedy=greedy)
 
     @torch.no_grad()
-    def collect(self, buf: RolloutBuffer, greedy: bool = False) -> tuple[list[dict[str, Any]], dict[str, float]]:
+    def collect(self, buf: RolloutBuffer, greedy: bool = False, active: np.ndarray | None = None) -> tuple[list[dict[str, Any]], dict[str, float]]:
         episodes: list[dict[str, Any]] = []
         n = self.vec.n
+        act_mask = np.ones(n, bool) if active is None else np.asarray(active, bool)
+        buf.valid[:] = act_mask[None, :]  # los workers pausados no aportan muestras
         invalid = 0
         self.kind_counts[:] = 0  # el histograma de acciones es por actualización, no acumulado
         for t in range(buf.T):
@@ -106,9 +109,11 @@ class Runner:
             act, logp, _, val = self._act(self.obs, self.mask, greedy)
             a = act.cpu().numpy().astype(np.int32)
             buf.action[t], buf.logp[t], buf.value[t] = a, logp.cpu().numpy(), val.cpu().numpy()
-            np.add.at(self.kind_counts, a[:, 0], 1)
-            results = self.vec.step(a.reshape(n, 1, -1))
+            np.add.at(self.kind_counts, a[act_mask, 0], 1)
+            results = self.vec.step(a.reshape(n, 1, -1), act_mask)
             for i in range(n):
+                if not act_mask[i]:
+                    continue
                 fin = self.vec.final[i]
                 r = fin if fin is not None else results[i]
                 buf.reward[t, i] = r.reward[0]
@@ -136,7 +141,7 @@ class Runner:
             self.results = results
             self.obs, self.mask = stack_obs(results)
         _, _, _, last = self._act(self.obs, self.mask, greedy)
-        info = {"invalid_rate": invalid / (buf.T * n)}
+        info = {"invalid_rate": invalid / (buf.T * max(1, int(act_mask.sum())))}
         self.last_value = last.cpu().numpy()
         return episodes, info
 
@@ -173,9 +178,9 @@ def evaluate(policy: Policy, env_cfg: dict[str, Any], workers: int, episodes: in
 
 
 def save_checkpoint(path: Path, policy: Policy, opt: torch.optim.Optimizer, update: int, cfg: dict[str, Any],
-                    manifest: Manifest, rstd: RunningStd, steps: int) -> None:
+                    manifest: Manifest, rstd: RunningStd, steps: int, episodes_done: int = 0) -> None:
     torch.save({
-        "model": policy.state_dict(), "optimizer": opt.state_dict(), "update": update, "steps": steps, "config": cfg,
+        "model": policy.state_dict(), "optimizer": opt.state_dict(), "update": update, "steps": steps, "episodes_done": episodes_done, "config": cfg,
         "protocol_version": manifest.raw["version"], "reward_std": rstd.state(),
         "torch_version": torch.__version__, "rng": {"torch": torch.get_rng_state()},
     }, path)
@@ -211,13 +216,13 @@ def train(cfg: dict[str, Any], run_dir: str | Path | None = None, resume: str | 
         policy = Policy(m, ModelConfig.from_dict(cfg["model"])).to(device)
         opt = torch.optim.Adam(policy.parameters(), lr=pcfg.lr, eps=1e-5)
         rstd = RunningStd(pcfg.gamma)
-        update0, steps = 0, 0
+        update0, steps, eps0 = 0, 0, 0
         if resume is not None:
             ck = torch.load(resume, map_location=device, weights_only=False)
             policy.load_state_dict(ck["model"])
             opt.load_state_dict(ck["optimizer"])
             rstd.load(ck["reward_std"])
-            update0, steps = ck["update"], ck["steps"]
+            update0, steps, eps0 = ck["update"], ck["steps"], ck.get("episodes_done", 0)
         runner = Runner(vec, policy, device)
         T = int(cfg["rollout_steps"])
         buf = RolloutBuffer(T, workers, {k: b.shape for k, b in m.obs.items()}, {k: b.shape for k, b in m.mask.items()}, m.action_dims)
@@ -227,29 +232,64 @@ def train(cfg: dict[str, Any], run_dir: str | Path | None = None, resume: str | 
         if log:
             print(f"run={run} workers={workers} params={n_params:,} T={T} protocolo=v{m.raw['version']}", flush=True)
         total = int(cfg["updates"])
+        goal = int(cfg["episodes"]) if cfg.get("episodes") else None  # duración en partidas (docs/specs/dashboard.md §5)
         t0 = time.time()
-        runctl.write_status(run, "running", update=update0, total=total, steps=steps, time=0.0, steps_per_s=0.0, workers=[])
+        st: dict[str, Any] = {"u": update0, "eps": eps0, "sps": 0.0, "saved_u": update0}
+
+        def status(state: str) -> None:
+            runctl.write_status(
+                run, state, update=st["u"], total=None if goal else total, episodes_done=st["eps"], episodes_total=goal, steps=steps,
+                time=round(time.time() - t0, 1), steps_per_s=round(st["sps"], 1),
+                workers=[{"i": i, "paused": i in st.get("paused", ()), "tick": int(runner.results[i].tick), "ep_len": int(runner.ep_len[i]),
+                          "events": dict(zip(m.event_names, runner.ep_events[i].tolist()))} for i in range(workers)])
+
+        def save(name: str | None) -> None:
+            if name:
+                save_checkpoint(run / name, policy, opt, st["u"], cfg, m, rstd, steps, st["eps"])
+            save_checkpoint(run / "latest.pt", policy, opt, st["u"], cfg, m, rstd, steps, st["eps"])
+            st["saved_u"] = st["u"]
+
+        status("running")
         with open(run / "metrics.jsonl", "a", encoding="utf8") as mf:
-            for u in range(update0 + 1, total + 1):
-                frac = 1 - (u - 1) / max(1, total)
+            while True:
+                # Control cooperativo del panel (docs/specs/dashboard.md): se atiende al empezar cada actualización.
+                while True:
+                    cmd, paused = runctl.read_control(run)
+                    st["paused"] = set(paused)
+                    active = np.array([i not in st["paused"] for i in range(workers)])
+                    if cmd != "run" and st["saved_u"] != st["u"]:
+                        save(None)
+                    if cmd == "stop" or (cmd == "run" and active.any()):
+                        break
+                    status("paused")
+                    time.sleep(1.0)
+                if cmd == "stop":
+                    status("stopped")
+                    break
+                u = st["u"] + 1
+                progress = st["eps"] / goal if goal else (u - 1) / max(1, total)
+                frac = max(0.0, 1 - progress)
                 for g in opt.param_groups:
                     g["lr"] = pcfg.lr * max(0.1, frac)
                 ent_coef = pcfg.ent_coef_final + (pcfg.ent_coef - pcfg.ent_coef_final) * frac
                 tr = time.time()
-                episodes, info = runner.collect(buf)
+                episodes, info = runner.collect(buf, active=active)
                 t_roll = time.time() - tr
-                rstd.update(buf.reward, buf.done)
+                rstd.update(buf.reward, buf.done, buf.valid)
                 buf.compute_gae(runner.last_value, pcfg.gamma, pcfg.gae_lambda, rstd.std)
                 tu = time.time()
                 stats = ppo_update(policy, opt, buf, pcfg, ent_coef, rng, device)
-                steps += T * workers
+                steps += T * int(active.sum())
+                st["u"], st["eps"] = u, st["eps"] + len(episodes)
+                done = st["eps"] >= goal if goal else u >= total
                 row: dict[str, Any] = {
-                    "update": u, "steps": steps, "time": round(time.time() - t0, 1),
+                    "update": u, "steps": steps, "episodes_done": st["eps"], "active_workers": int(active.sum()),
+                    "time": round(time.time() - t0, 1),
                     "t_rollout": round(t_roll, 2), "t_update": round(time.time() - tu, 2),
                     "reward_scale": rstd.std, "ent_coef": ent_coef, **stats, **info,
                     "noop_frac": float(runner.kind_counts[0] / max(1, runner.kind_counts.sum())),
                     "kind_frac": (runner.kind_counts / max(1, runner.kind_counts.sum())).round(4).tolist(),
-                    "step_reward_mean": float(buf.reward.mean()),
+                    "step_reward_mean": float(buf.reward[buf.valid].mean()),
                 }
                 if episodes:
                     for k in episodes[0]:
@@ -262,38 +302,19 @@ def train(cfg: dict[str, Any], run_dir: str | Path | None = None, resume: str | 
                 mf.flush()
                 if log:
                     pr = " ".join(f"{ABBR.get(k, k[:4])}={row[f'ep_part_{k}']:+.3f}" for k in runner.parts if f"ep_part_{k}" in row)
-                    ev = " ".join(f"{a}={row[f'ep_ev_{k}']:.1f}" for a, k in EV_SHOW if f"ep_ev_{k}" in row)
-                    print(f"[{u}/{total}] steps={steps} r/step={row['step_reward_mean']:+.4f} "
+                    evs = " ".join(f"{a}={row[f'ep_ev_{k}']:.1f}" for a, k in EV_SHOW if f"ep_ev_{k}" in row)
+                    prog = f"{st['eps']}/{goal} partidas" if goal else f"{u}/{total}"
+                    print(f"[{u}|{prog}] steps={steps} r/step={row['step_reward_mean']:+.4f} "
                           f"ep_ret={row.get('ep_return', float('nan')):+.3f} ({pr}) ent={stats['ent']:.2f} kl={stats['kl']:.4f} "
-                          f"[{ev}] inv={info['invalid_rate']:.2f} noop={row['noop_frac']:.2f} "
+                          f"[{evs}] inv={info['invalid_rate']:.2f} noop={row['noop_frac']:.2f} "
                           f"roll={t_roll:.1f}s upd={row['t_update']:.1f}s", flush=True)
-                saved = False
-                if u % cfg["checkpoint_every"] == 0 or u == total:
-                    save_checkpoint(run / f"ckpt_{u:06d}.pt", policy, opt, u, cfg, m, rstd, steps)
-                    save_checkpoint(run / "latest.pt", policy, opt, u, cfg, m, rstd, steps)
-                    saved = True
-                sps = T * workers / max(1e-6, t_roll + row["t_update"])
-
-                def status(state: str) -> None:
-                    runctl.write_status(
-                        run, state, update=u, total=total, steps=steps, time=round(time.time() - t0, 1), steps_per_s=round(sps, 1),
-                        workers=[{"i": i, "tick": int(runner.results[i].tick), "ep_len": int(runner.ep_len[i]),
-                                  "events": dict(zip(m.event_names, runner.ep_events[i].tolist()))} for i in range(workers)])
-
-                # Control cooperativo del panel (docs/specs/dashboard.md): se atiende entre actualizaciones.
-                cmd = runctl.read_command(run)
-                if cmd in ("pause", "stop") and not saved:
-                    save_checkpoint(run / "latest.pt", policy, opt, u, cfg, m, rstd, steps)
-                while cmd == "pause":
-                    status("paused")
-                    time.sleep(1.0)
-                    cmd = runctl.read_command(run)
-                    if cmd == "stop":
-                        save_checkpoint(run / "latest.pt", policy, opt, u, cfg, m, rstd, steps)
-                if cmd == "stop":
-                    status("stopped")
+                if u % cfg["checkpoint_every"] == 0 or done:
+                    save(f"ckpt_{u:06d}.pt")
+                st["sps"] = T * int(active.sum()) / max(1e-6, t_roll + row["t_update"])
+                if done:
+                    status("finished")
                     break
-                status("finished" if u == total else "running")
+                status("running")
     finally:
         vec.close()
     return run
@@ -305,10 +326,11 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--run-dir", default=None)
     ap.add_argument("--resume", default=None)
     ap.add_argument("--updates", type=int, default=None)
+    ap.add_argument("--episodes", type=int, default=None)
     ap.add_argument("--workers", type=int, default=None)
     ap.add_argument("--seed", type=int, default=None)
     a = ap.parse_args(argv)
-    over: dict[str, Any] = {k: v for k, v in (("updates", a.updates), ("workers", a.workers), ("seed", a.seed)) if v is not None}
+    over: dict[str, Any] = {k: v for k, v in (("updates", a.updates), ("episodes", a.episodes), ("workers", a.workers), ("seed", a.seed)) if v is not None}
     train(load_config(a.config, over), a.run_dir, a.resume)
 
 

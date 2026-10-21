@@ -81,5 +81,20 @@ def read_command(run: Path) -> str:
     return cmd if cmd in ("run", "pause", "stop") else "run"
 
 
+def read_control(run: Path) -> tuple[str, list[int]]:
+    """(comando, workers pausados)."""
+    c = read_json(run / "control.json", {}) or {}
+    cmd = c.get("command", "run")
+    paused = c.get("paused_workers", [])
+    ok = [int(i) for i in paused if isinstance(i, int) and not isinstance(i, bool) and i >= 0] if isinstance(paused, list) else []
+    return (cmd if cmd in ("run", "pause", "stop") else "run"), sorted(set(ok))
+
+
+def write_control(run: Path, command: str | None = None, paused_workers: list[int] | None = None) -> None:
+    """Cambia solo lo que se pasa y conserva el resto."""
+    cmd, paused = read_control(run)
+    write_json(run / "control.json", {"command": command or cmd, "paused_workers": paused if paused_workers is None else sorted(set(paused_workers))})
+
+
 def write_status(run: Path, state: str, **fields: Any) -> None:
     write_json(run / "status.json", {"pid": os.getpid(), "state": state, "updated_at": time.time(), **fields})

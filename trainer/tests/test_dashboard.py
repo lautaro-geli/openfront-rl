@@ -26,6 +26,7 @@ def panel(tmp_path):
     cfgs = tmp_path / "configs"
     cfgs.mkdir()
     (cfgs / "mini.yaml").write_text(yaml.safe_dump(CFG), encoding="utf8")
+    (cfgs / "duo.yaml").write_text(yaml.safe_dump({**CFG, "workers": 2}), encoding="utf8")
     (cfgs / "goals.yaml").write_text(yaml.safe_dump(GOALS), encoding="utf8")
     p = Panel(tmp_path / "runs", cfgs)
     srv = make_server(p, 0)
@@ -67,7 +68,7 @@ def test_rechaza_peticiones_fuera_de_la_lista(panel):
     assert call(panel, "/api/runs", {"config": "mini.yaml", "workers": "3"})[0] == 400
     assert call(panel, "/api/runs/../x/status")[0] in (400, 404)
     assert call(panel, "/api/runs/noexiste/status")[0] == 404
-    assert call(panel, "/api/configs") == (200, ["mini.yaml"])
+    assert call(panel, "/api/configs") == (200, ["duo.yaml", "mini.yaml"])
 
 
 def test_ciclo_completo_lanzar_pausar_reanudar_detener(panel):
@@ -115,3 +116,31 @@ def test_metas_se_evaluan_contra_metrics(panel):
     g = {x["id"]: x for x in panel.goals("m1")}
     assert g["g1"]["done"] and g["g1"]["best"] == 3.0
     assert g["g2"]["done"] and g["g2"]["best"] == 0.0
+
+
+def test_pausar_y_reanudar_un_worker(panel):
+    assert call(panel, "/api/runs", {"config": "duo.yaml", "name": "w1", "episodes": 500})[0] == 201
+
+    def st():
+        return call(panel, "/api/runs/w1/status")[1]
+
+    wait(lambda: len((st()["status"] or {}).get("workers") or []) == 2 and st()["status"]["update"] >= 2, "2 workers activos")
+    assert call(panel, "/api/runs/w1/workers", {"worker": 5, "paused": True})[0] == 400
+    assert call(panel, "/api/runs/w1/workers", {"worker": 1, "paused": "si"})[0] == 400
+    assert call(panel, "/api/runs/w1/workers", {"worker": 1, "paused": True}) == (200, {"paused_workers": [1]})
+    assert st()["paused_workers"] == [1]
+
+    wait(lambda: st()["status"]["workers"][1]["paused"], "worker 1 en pausa")
+    ticks = [w["tick"] for w in st()["status"]["workers"]]
+    u0 = st()["status"]["update"]
+    wait(lambda: st()["status"]["update"] >= u0 + 2, "dos actualizaciones más con un solo worker")
+    now = st()["status"]["workers"]
+    assert now[1]["tick"] == ticks[1] and now[0]["tick"] != ticks[0]  # el pausado no avanza, el otro sí
+    rows = call(panel, "/api/runs/w1/metrics?since=0")[1]
+    assert rows[-1]["active_workers"] == 1 and rows[-1]["episodes_done"] >= 0
+
+    assert call(panel, "/api/runs/w1/workers", {"worker": 1, "paused": False}) == (200, {"paused_workers": []})
+    u1 = st()["status"]["update"]
+    wait(lambda: st()["status"]["update"] >= u1 + 2 and not st()["status"]["workers"][1]["paused"], "worker 1 reanudado")
+    assert call(panel, "/api/runs/w1/metrics?since=0")[1][-1]["active_workers"] == 2
+    call(panel, "/api/runs/w1/kill", {})

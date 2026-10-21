@@ -38,17 +38,19 @@ class RunningStd:
         self.gamma, self.ret = gamma, None
         self.n, self.mean, self.m2 = 0, 0.0, 0.0
 
-    def update(self, rewards: np.ndarray, dones: np.ndarray) -> None:
+    def update(self, rewards: np.ndarray, dones: np.ndarray, valid: np.ndarray | None = None) -> None:
+        """`valid` [T, N]: solo los pasos válidos (workers no pausados) cuentan para la escala."""
         if self.ret is None:
             self.ret = np.zeros(rewards.shape[1], np.float64)
-        for r, d in zip(rewards, dones):
-            self.ret = self.ret * self.gamma + r
-            for x in self.ret:
+        v = np.ones(rewards.shape, bool) if valid is None else valid
+        for r, d, ok in zip(rewards, dones, v):
+            self.ret = np.where(ok, self.ret * self.gamma + r, self.ret)
+            for x in self.ret[ok]:
                 self.n += 1
                 dlt = x - self.mean
                 self.mean += dlt / self.n
                 self.m2 += dlt * (x - self.mean)
-            self.ret = self.ret * (1.0 - d)
+            self.ret = np.where(ok, self.ret * (1.0 - d), self.ret)
 
     @property
     def std(self) -> float:
@@ -76,6 +78,7 @@ class RolloutBuffer:
         self.boot = np.zeros((T, N), np.float32)  # valor del estado siguiente si el episodio se truncó (si no, 0)
         self.adv = np.zeros((T, N), np.float32)
         self.ret = np.zeros((T, N), np.float32)
+        self.valid = np.ones((T, N), bool)  # False = el worker estaba pausado: esas muestras no se usan
 
     def add_obs(self, t: int, obs: dict[str, np.ndarray], mask: dict[str, np.ndarray]) -> None:
         for k in OBS_KEYS:
@@ -97,7 +100,7 @@ class RolloutBuffer:
         self.ret = self.adv + self.value
 
     def minibatches(self, size: int, rng: np.random.Generator) -> Iterator[np.ndarray]:
-        idx = rng.permutation(self.T * self.N)
+        idx = rng.permutation(np.flatnonzero(self.valid.reshape(-1)))
         for s in range(0, len(idx), size):
             yield idx[s : s + size]
 
@@ -121,7 +124,7 @@ def ppo_update(policy: Policy, opt: torch.optim.Optimizer, buf: RolloutBuffer, c
                rng: np.random.Generator, device: torch.device) -> dict[str, float]:
     """Una actualización completa (varias épocas). Devuelve métricas medias."""
     stats: dict[str, list[float]] = {k: [] for k in ("loss", "pg", "vf", "ent", "kl", "clipfrac", "expl_var")}
-    adv_all = buf.adv.reshape(-1)
+    adv_all = buf.adv[buf.valid]
     mean, std = float(adv_all.mean()), float(adv_all.std() + 1e-8)
     stop = False
     for _ in range(cfg.epochs):

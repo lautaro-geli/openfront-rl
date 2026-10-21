@@ -129,3 +129,33 @@ def test_entrenamiento_corto_guarda_config_y_checkpoint(tmp_path):
     import json
     row = json.loads(lines[-1])
     assert np.isfinite(row["loss"]) and np.isfinite(row["ent"])
+
+
+def test_buffer_ignora_muestras_de_workers_pausados():
+    from openfront_rl.model import MASK_KEYS, OBS_KEYS
+    from openfront_rl.ppo import RolloutBuffer, RunningStd
+
+    buf = RolloutBuffer(4, 3, {k: (1,) for k in OBS_KEYS}, {k: (1,) for k in MASK_KEYS}, 6)
+    buf.valid[:, 1] = False
+    idx = np.concatenate(list(buf.minibatches(5, np.random.default_rng(0))))
+    assert len(idx) == 8 and set(idx % 3) == {0, 2}  # índice plano = t * N + worker
+    r = RunningStd(0.99)
+    rew = np.ones((4, 3))
+    r.update(rew, np.zeros((4, 3)), buf.valid)
+    assert r.n == 8 and r.ret[1] == 0.0  # el worker pausado no avanza su retorno descontado
+
+
+def test_entrenamiento_por_partidas_termina_y_lo_guarda(tmp_path):
+    import json
+
+    cfg = load_config(None, {
+        "name": "partidas", "seed": 5, "workers": 2, "rollout_steps": 40, "episodes": 3, "updates": 999, "checkpoint_every": 1000,
+        "eval": {"every": 0, "episodes": 1}, "ppo": {"minibatch": 16, "epochs": 1},
+        "env": {"bots": 5, "maxTicks": 400, "difficulty": "Easy", "nations": "disabled"},
+    })
+    run = train(cfg, tmp_path / "run", log=False)
+    rows = [json.loads(x) for x in (run / "metrics.jsonl").read_text().splitlines()]
+    assert rows[-1]["episodes_done"] >= 3 and rows[-2]["episodes_done"] < 3 and len(rows) < 10
+    st = json.loads((run / "status.json").read_text())
+    assert st["state"] == "finished" and st["episodes_total"] == 3 and st["episodes_done"] == rows[-1]["episodes_done"]
+    assert torch.load(run / "latest.pt", weights_only=False)["episodes_done"] == rows[-1]["episodes_done"]

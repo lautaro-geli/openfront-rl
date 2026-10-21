@@ -30,3 +30,7 @@ Los entrenamientos son largos (horas) y corren en el PC del usuario (Windows, 4 
 - Test: el servidor lanza un entrenamiento corto, ve su estado, lo pausa, lo reanuda y lo detiene, y quedan los checkpoints.
 - Test: el servidor rechaza configuraciones fuera de `configs/` y argumentos desconocidos.
 - Test: las metas se evalúan bien contra un `metrics.jsonl` de ejemplo.
+
+## Enmienda 2026-10-21: duración en partidas y workers pausables
+- **Duración en partidas** (`episodes`), no en actualizaciones: el usuario piensa en "50 partidas", no en bloques de 128 pasos. El run termina al cierre de la actualización en la que se alcanza; las curvas de `lr` y entropía siguen el avance en partidas. Alternativa descartada: cortar la actualización a la mitad al llegar a la partida N (rompe el tamaño fijo del lote de PPO).
+- **Pausar un worker** congela su partida y marca sus muestras como no válidas en el buffer, en vez de rellenar con datos falsos o reducir el lote (la forma `[T, N]` se mantiene y no hay que reconstruir nada). La pausa de un worker se aplica entre actualizaciones, como el resto del control cooperativo. Alternativa descartada: cerrar el proceso Node del worker y recrearlo (pierde la partida en curso y tarda varios segundos).

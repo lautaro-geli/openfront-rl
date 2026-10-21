@@ -5,6 +5,7 @@ device: cpu
 workers: null          # null = núcleos − 1 (5 en un i5-9400)
 rollout_steps: 128     # 128 pasos × 5 partidas = 640 muestras por actualización
 updates: 1000
+episodes: 50          # duración del run en partidas de entrenamiento terminadas (anula `updates`)
 checkpoint_every: 25
 eval:
   every: 50

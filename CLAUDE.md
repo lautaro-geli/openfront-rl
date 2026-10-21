@@ -29,7 +29,7 @@ Entrenar una política (PyTorch, PPO + self-play) que juegue partidas completas 
 - Tests trainer: `cd trainer && pytest` (tests contra el motor real, incluida la red y PPO; necesita Node 24, o `OPENFRONT_NODE`)
 - Medir velocidad: `cd trainer && PYTHONPATH=. python scripts/bench.py --workers 1 5 --map World --bots 400`
 - Panel de control: `cd trainer && python -m openfront_rl.dashboard` → http://127.0.0.1:8765 (lanza, pausa, reanuda, detiene y mata entrenamientos; métricas, workers, arquitectura y metas; ADR 0008, `docs/specs/dashboard.md`)
-- Entrenar: `cd trainer && python -m openfront_rl.train --config configs/ppo_base.yaml` (crea `runs/<nombre>-<semilla>/` con config, `metrics.jsonl` y checkpoints; `--resume runs/.../latest.pt`)
+- Entrenar: `cd trainer && python -m openfront_rl.train --config configs/ppo_base.yaml` (crea `runs/<nombre>-<semilla>/` con config, `metrics.jsonl` y checkpoints; `--resume runs/.../latest.pt`; `--episodes 50` fija la duración en partidas, `--workers N`)
 
 ## Convenciones
 - Python: tipado con type hints, `ruff` + `black`, `pytest`.
