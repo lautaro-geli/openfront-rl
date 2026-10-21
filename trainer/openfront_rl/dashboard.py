@@ -180,17 +180,21 @@ class Panel:
         cq = cfg.get("conquest") or {}
         rewards = {"territory": env.get("rewardTerritoryWeight", 0.8), "attack": env.get("rewardAttackWeight", 0.0),
                    "economy": env.get("rewardEconomyWeight", 0.0), "defense": env.get("rewardDefenseWeight", 0.0),
-                   "conquest_budget": cq.get("budget", 0.0), "conquest_until": cq.get("until", 0.5)}
+                   "milestones": env.get("rewardMilestonesWeight", 0.0), "troops": env.get("rewardTroopsWeight", 0.0),
+                   "conquest_budget": cq.get("budget", 0.0), "conquest_until": cq.get("until", 0.5),
+                   "territory_knee": env.get("territoryKnee", 0.0), "territory_knee_share": env.get("territoryKneeShare", 0.5)}
         return {"env": env, "rewards": rewards, "maps": list(MAPS), "difficulties": list(DIFFICULTIES)}
 
-    REWARD_ENV = {"territory": "rewardTerritoryWeight", "attack": "rewardAttackWeight", "economy": "rewardEconomyWeight", "defense": "rewardDefenseWeight"}
+    REWARD_ENV = {"territory": "rewardTerritoryWeight", "attack": "rewardAttackWeight", "economy": "rewardEconomyWeight", "defense": "rewardDefenseWeight",
+                  "milestones": "rewardMilestonesWeight", "troops": "rewardTroopsWeight"}
+    CURVE_ENV = {"territory_knee": "territoryKnee", "territory_knee_share": "territoryKneeShare"}
 
     @classmethod
     def reward_args(cls, rewards: Any) -> list[str]:
         """Valida `rewards` (presupuestos y bonus de conquista) y lo pasa a `train.py` (dashboard.md §4b')."""
         if rewards is None:
             return []
-        allowed = {*cls.REWARD_ENV, "conquest_budget", "conquest_until"}
+        allowed = {*cls.REWARD_ENV, *cls.CURVE_ENV, "conquest_budget", "conquest_until"}
         if not isinstance(rewards, dict) or set(rewards) - allowed:
             raise ApiError(400, f"rewards solo admite {sorted(allowed)}")
         vals: dict[str, float] = {}
@@ -200,15 +204,15 @@ class Panel:
             if isinstance(v, bool) or not isinstance(v, (int, float)) or v != v:
                 raise ApiError(400, f"{k} debe ser un número")
             lo_ok = v > 0 if k == "conquest_until" else v >= 0
-            if not lo_ok or v > 1:
-                raise ApiError(400, f"{k} debe estar entre 0 y 1" + (" (mayor que 0)" if k == "conquest_until" else ""))
+            if not lo_ok or v > 1 or (k == "territory_knee" and v >= 0.8):
+                raise ApiError(400, f"{k} debe estar entre 0 y 1" + (" (mayor que 0)" if k == "conquest_until" else " (el tramo inicial, menor que 0.8)" if k == "territory_knee" else ""))
             vals[k] = float(v)
-        if sum(v for k, v in vals.items() if k != "conquest_until") >= 1:
+        if sum(v for k, v in vals.items() if k not in ("conquest_until", *cls.CURVE_ENV)) >= 1:
             raise ApiError(400, "la suma de los presupuestos debe ser menor que 1: ganar (±1) tiene que pesar más")
         out: list[str] = []
         for k, v in vals.items():
-            if k in cls.REWARD_ENV:
-                out += ["--env", f"{cls.REWARD_ENV[k]}={v}"]
+            if k in cls.REWARD_ENV or k in cls.CURVE_ENV:
+                out += ["--env", f"{({**cls.REWARD_ENV, **cls.CURVE_ENV})[k]}={v}"]
             else:
                 out += [f"--{k.replace('_', '-')}", str(v)]
         return out

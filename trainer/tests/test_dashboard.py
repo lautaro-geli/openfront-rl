@@ -212,7 +212,10 @@ def test_recompensas_editables_se_validan_y_se_pasan_a_train(panel):
     assert panel.config_env("mini.yaml")["rewards"].keys() >= {"territory", "attack", "economy", "defense", "conquest_budget", "conquest_until"}
     a = panel.reward_args({"territory": 0.5, "attack": 0.1, "conquest_budget": 0.2, "conquest_until": 0.4})
     assert a == ["--env", "rewardTerritoryWeight=0.5", "--env", "rewardAttackWeight=0.1", "--conquest-budget", "0.2", "--conquest-until", "0.4"]
-    for bad in ({"territory": 0.9, "attack": 0.2}, {"territory": -0.1}, {"territory": "x"}, {"conquest_until": 0}, {"conquest_until": 1.5}, {"otra": 0.1}):
+    b = panel.reward_args({"milestones": 0.06, "troops": 0.05, "territory_knee": 0.15, "territory_knee_share": 0.35})
+    assert b == ["--env", "rewardMilestonesWeight=0.06", "--env", "rewardTroopsWeight=0.05", "--env", "territoryKnee=0.15", "--env", "territoryKneeShare=0.35"]
+    assert panel.reward_args({"territory": 0.4, "attack": 0.08, "economy": 0.04, "defense": 0.05, "milestones": 0.06, "troops": 0.05, "conquest_budget": 0.2, "territory_knee": 0.15})
+    for bad in ({"territory_knee": 0.8}, {"territory_knee_share": 1.5}, {"territory": 0.4, "attack": 0.1, "economy": 0.1, "defense": 0.1, "milestones": 0.1, "troops": 0.1, "conquest_budget": 0.2}, {"territory": 0.9, "attack": 0.2}, {"territory": -0.1}, {"territory": "x"}, {"conquest_until": 0}, {"conquest_until": 1.5}, {"otra": 0.1}):
         with pytest.raises(ApiError):
             panel.reward_args(bad)
     from openfront_rl.train import parse_env

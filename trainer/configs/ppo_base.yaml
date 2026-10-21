@@ -20,9 +20,13 @@ env:
   grid: {h: 32, w: 64}
   samples: 4
   rewardTerritoryWeight: 0.40
-  rewardAttackWeight: 0.12
-  rewardEconomyWeight: 0.10
+  rewardAttackWeight: 0.08
+  rewardEconomyWeight: 0.04
   rewardDefenseWeight: 0.05
+  rewardMilestonesWeight: 0.06   # primera ciudad, puerto y fábrica (reward.md §2b)
+  rewardTroopsWeight: 0.05       # tropas en la zona justa, ~42 % del máximo (reward.md §2c)
+  territoryKnee: 0.15            # el primer 15 % del mapa paga el 35 % del presupuesto de territorio (reward.md §2)
+  territoryKneeShare: 0.35
   # Sin diplomacia ni comercio: contra tribus no aportan (docs/specs/actions.md §4b).
   disabledActions: [alliance_request, alliance_reject, alliance_break, alliance_extend, embargo_start, embargo_stop,
                     embargo_all_start, embargo_all_stop, target_player, emoji, donate_gold, donate_troops]

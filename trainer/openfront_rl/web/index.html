@@ -102,7 +102,7 @@ function draw(cv, leg, series, opts) {
 const col = (name, label) => ({name: label, pts: metrics.filter(r => typeof r[name] === "number").map(r => ({x: r.update, y: r[name]}))});
 
 /* ---------- pantallas ---------- */
-const RW = [["territory", "Territorio"], ["attack", "Poder de ataque"], ["economy", "Economía"], ["defense", "Defensa"], ["conquest_budget", "Bonus tribus (máx.)"], ["conquest_until", "Bonus tribus: llega a 0 en (progreso 0–1)"]];
+const RW = [["territory", "Territorio"], ["attack", "Poder de ataque"], ["economy", "Economía"], ["defense", "Defensa"], ["milestones", "Hitos (ciudad, puerto, fábrica)"], ["troops", "Tropas en la zona justa"], ["conquest_budget", "Bonus tribus (máx.)"], ["conquest_until", "Bonus tribus: llega a 0 en (progreso 0–1)"], ["territory_knee", "Territorio: tramo inicial (fracción del mapa)"], ["territory_knee_share", "Territorio: parte del presupuesto que paga ese tramo"]];
 async function viewProcesos(m) {
   const [runs, cfgs] = await Promise.all([api("/runs"), api("/configs")]);
   const err = h("div", {class: "err"});
@@ -135,7 +135,7 @@ async function viewProcesos(m) {
       h("small", {id: "rwsum", class: "muted"}, "")),
     h("button", {class: "pri", type: "submit"}, "Lanzar"));
   function sumRewards() {
-    const t = RW.filter(([k]) => k !== "conquest_until").reduce((a, [k]) => a + (parseFloat(f.elements["rw_" + k].value) || 0), 0);
+    const t = RW.filter(([k]) => !["conquest_until", "territory_knee", "territory_knee_share"].includes(k)).reduce((a, [k]) => a + (parseFloat(f.elements["rw_" + k].value) || 0), 0);
     const el = f.querySelector("#rwsum"); el.textContent = `Suma de presupuestos: ${t.toFixed(2)} ${t < 1 ? "(ok, ganar pesa más)" : "(demasiado: tiene que ser menor que 1)"}`; el.style.color = t < 1 ? "" : "#c0392b";
   }
   const loadScenario = async c => {
@@ -206,7 +206,7 @@ async function viewRun(m) {
     h("div", {class: "card"}, h("h2", {}, "Workers (tocá uno para ver el detalle y su registro; pausar se aplica al empezar la próxima actualización)"), workers.length ? h("div", {class: "row"}, workers) : h("span", {class: "muted"}, "sin datos todavía")),
     h("div", {class: "charts"},
       chart("Retorno por episodio (suma de componentes)", [col("ep_return", "retorno")]),
-      chart("Retorno por componente", ["territory", "attack", "economy", "defense", "conquest", "terminal"].map((k, i) => col("ep_part_" + k, ["territorio", "ataque", "economía", "defensa", "tribus (bonus)", "fin"][i]))),
+      chart("Retorno por componente", ["territory", "attack", "economy", "defense", "milestones", "troops", "conquest", "terminal"].map((k, i) => col("ep_part_" + k, ["territorio", "ataque", "economía", "defensa", "hitos", "tropas", "tribus (bonus)", "fin"][i]))),
       chart("Conducta por episodio", ents.map((k, i) => col(k, labels[i])), {zero: true}),
       chart("Entropía y KL", [col("ent", "entropía"), col("kl", "KL")]),
       chart("Ventaja: explicada por el crítico", [col("expl_var", "varianza explicada")]),

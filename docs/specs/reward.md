@@ -1,4 +1,4 @@
-# Spec: recompensa (v2)
+# Spec: recompensa (v2.2)
 
 > Estado: **aprobada para implementar**. Sustituye a la v1. Se calcula en `bridge/src/reward.ts` (tiene acceso al motor) y viaja por el protocolo como **componentes separados** (`docs/specs/protocol.md` §4). La recompensa total es su suma.
 
@@ -15,16 +15,25 @@ Es shaping basado en potencial (Ng et al., 1999): se cobra al mejorar, se devuel
 |---|---|---|---|
 | 1 | `terminal` | +1 al ganar, −1 al ser eliminado, 0 si no | — |
 | 2 | `territory` | 0.40 | `min(frac / 0.8, 1)` |
-| 3 | `attack` | 0.12 | 0.8 · `Φ_tropas` + 0.2 · `Φ_silos` |
-| 4 | `economy` | 0.10 | `Φ_ingreso` |
+| 3 | `attack` | 0.08 | 0.8 · `Φ_tropas` + 0.2 · `Φ_silos` |
+| 4 | `economy` | 0.04 | `Φ_ingreso` |
 | 5 | `defense` | 0.05 | 0.5 · `Φ_seguridad` + 0.5 · `Φ_puestos` |
+| 6 | `milestones` | 0.06 | `(ciudad + puerto + fábrica) / 3` (§2b) |
+| 7 | `troops` | 0.05 | por paso, no potencial: tropas en la zona justa (§2c) |
+| (trainer) | `conquest` | 0.20, decae a 0 | bonus por tribu conquistada (§9) |
 
-La suma de los presupuestos es 0.67 < 1: **ganar siempre pesa más** que todo lo que se puede ganar por el camino. Los pesos son campos de `EnvConfig` (`rewardTerritoryWeight`, `rewardAttackWeight`, `rewardEconomyWeight`, `rewardDefenseWeight`). Con peso 0 el componente no se calcula. Valores por defecto del puente: territorio 0.8 (equivale a `1.0 · Δ%` de la v0), el resto 0. Ningún componente se paga durante la fase de spawn ni después de que el agente fue eliminado.
+Con los valores de entrenamiento (`configs/ppo_base.yaml`) la suma de los presupuestos es 0.88 < 1: **ganar siempre pesa más** que todo lo que se puede ganar por el camino. Los pesos son campos de `EnvConfig` (`rewardTerritoryWeight`, `rewardAttackWeight`, `rewardEconomyWeight`, `rewardDefenseWeight`, `rewardMilestonesWeight`, `rewardTroopsWeight`). Con peso 0 el componente no se calcula. Valores por defecto del puente: territorio 0.8 (equivale a `1.0 · Δ%` de la v0), el resto 0. Ningún componente se paga durante la fase de spawn ni después de que el agente fue eliminado.
 
 ## 2. Potenciales
 Todos salen del estado del motor, tal como lo ve cualquier jugador.
 
-**`territory`** — `frac` = casillas propias / casillas de tierra. Llegar al 80 % (`PERCENT_TILES_OWNED_TO_WIN`, `packages/engine-lib/src/configuration/Config.ts:74`) rinde `B_T` y, además, el +1 de ganar. Cada 1 % del mapa vale `B_T / 80`.
+**`territory`** — `frac` = casillas propias / casillas de tierra. Llegar al 80 % (`PERCENT_TILES_OWNED_TO_WIN`, `packages/engine-lib/src/configuration/Config.ts:74`) rinde `B_T` y, además, el +1 de ganar. La curva es **por tramos** (campos `territoryKnee` = `k` y `territoryKneeShare` = `s`):
+
+```
+Φ_territorio(frac) = s · min(frac / k, 1) + (1 − s) · clip((frac − k) / (0.8 − k), 0, 1)
+```
+
+El primer tramo (tierra libre, hasta `k`) paga la fracción `s` del presupuesto y el resto va lineal hasta el 80 %. Configuración de entrenamiento: `k = 0.15`, `s = 0.35` (con `B_T = 0.40`: el primer 15 % del mapa paga 0.14, es decir 0.0093 por cada 1 %, y del 15 % al 80 % paga 0.26, 0.0040 por cada 1 %). `k = 0` (valor por defecto del puente) deja la curva lineal de antes: cada 1 % vale `B_T / 80`.
 
 **`attack`** (poder de ataque) — mejora de la capacidad, no de las tropas actuales: estas bajan al atacar, así que premiarlas castigaría atacar.
 - `Φ_tropas = clamp((maxTroops − maxTroopsWithoutCities) / 1 000 000, 0, 1)`: solo cuenta lo que aportan las **ciudades** terminadas (250 000 por nivel, `Config.ts:162`, `Config.ts:330-346`); 4 niveles de ciudad → 1. **No** usa el tope total de tropas: ese crece con `casillas^0.6`, así que premiaría el territorio dos veces (en la v2 inicial medimos que `attack` pagaba 5–10 veces más que `territory` por el mismo avance; ver §6).
@@ -35,6 +44,19 @@ Todos salen del estado del motor, tal como lo ve cualquier jugador.
 **`defense`** —
 - `Φ_seguridad` = la de la v1 (promedio de `power`, `pressure`, `exposure`; ver §3).
 - `Φ_puestos = min(1, puestos de defensa terminados / 4)`. Cada puesto multiplica ×5 las pérdidas del atacante y ×3 su lentitud dentro de 30 casillas (`EngineConfig.ts:141-147`, `Config.ts:175`).
+
+### 2b. Hitos de construcción (`milestones`)
+`Φ_hitos = (hay ciudad + hay puerto + hay fábrica) / 3`, donde "hay" = al menos una unidad **terminada** (no en construcción) y activa del agente. Es un potencial: paga una vez al aparecer cada estructura (`B_H / 3` por hito; construir más no suma) y devuelve lo cobrado si se pierde. Enseña la secuencia economía básica; el puerto solo rinde comercio con naciones (§4), pero sirve como hito.
+
+### 2c. Tropas en la zona justa (`troops`)
+Las tropas crecen más rápido cuando están en torno al 42 % del máximo: `(10 + T^0.73 / 4) · (1 − T / máx)` (`packages/engine-lib/src/configuration/Config.ts:370-376`; el máximo de esa expresión está en ≈ 0.42 para cualquier tope). Por encima del ~80 % casi no regeneran y por debajo del ~20 % no hay con qué atacar. Con `ρ = tropas / tropas máximas`:
+
+```
+banda(ρ) = 1 si 0.30 ≤ ρ ≤ 0.60; cae linealmente a 0 en ρ = 0.10 y ρ = 0.90
+r_troops = B_R · banda(ρ) / N_pasos       (N_pasos = maxTicks / decisionInterval)
+```
+
+No es un potencial (atacar baja las tropas y el efecto se anularía): es una tasa por paso, acotada a `B_R` en una partida de duración máxima. Solo cobra tras el spawn y mientras el agente vive.
 
 ## 3. Seguridad (no morir ni quedar en una posición complicada)
 `Φ_seguridad ∈ [0, 1]` es el promedio de tres términos:
@@ -82,4 +104,4 @@ bonus por tribu = B_c · max(0, 1 − p / p_fin) / N_tribus       (p = progreso 
 - `B_c` = `conquest.budget` (0.20 por defecto): lo máximo que paga el bonus en una partida si se conquistan todas las tribus. `p_fin` = `conquest.until` (0.5): a partir de ese progreso el bonus es 0. `N_tribus` = `env.bots`.
 - Se paga por cada tribu eliminada porque el agente tomó su último territorio (evento `tribes_conquered`, `docs/specs/protocol.md` §4). No se paga por ataques ni por tribus que mató otro jugador.
 - Lo calcula `trainer/openfront_rl/train.py` (el puente no conoce el progreso del entrenamiento), se suma a la recompensa del paso y se registra como componente aparte `conquest` (`ep_part_conquest`). La evaluación no lo incluye.
-- Presupuestos: 0.67 + 0.20 < 1, así que ganar sigue pesando más que todo lo que se cobra por el camino. Con `conquest.budget: 0` está apagado.
+- Presupuestos: 0.88 < 1, así que ganar sigue pesando más que todo lo que se cobra por el camino. Con `conquest.budget: 0` está apagado.

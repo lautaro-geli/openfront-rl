@@ -21,6 +21,11 @@ export interface EnvConfig {
   rewardAttackWeight: number;
   rewardEconomyWeight: number;
   rewardDefenseWeight: number;
+  rewardMilestonesWeight: number;
+  rewardTroopsWeight: number;
+  /** Curva de territorio por tramos (spec §2): hasta `territoryKnee` se paga `territoryKneeShare` del presupuesto. 0 = lineal. */
+  territoryKnee: number;
+  territoryKneeShare: number;
   /** Tipos de acción que se apagan en la máscara (docs/specs/actions.md §4b). */
   disabledActions: string[];
   /** Número de jugadores controlados por código en la partida (MultiAgentEnv). */

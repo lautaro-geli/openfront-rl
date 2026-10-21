@@ -4,10 +4,10 @@ import { UnitType } from "@openfront/engine-api/game/GameTypes";
 import { allNeighbors } from "./actions";
 import type { EnvConfig } from "./types";
 
-export const REWARD_PARTS = ["territory", "attack", "economy", "defense", "terminal"] as const;
+export const REWARD_PARTS = ["territory", "attack", "economy", "defense", "milestones", "troops", "terminal"] as const;
 export type RewardParts = Record<(typeof REWARD_PARTS)[number], number>;
 
-export const zeroParts = (): RewardParts => ({ territory: 0, attack: 0, economy: 0, defense: 0, terminal: 0 });
+export const zeroParts = (): RewardParts => ({ territory: 0, attack: 0, economy: 0, defense: 0, milestones: 0, troops: 0, terminal: 0 });
 
 /** Estado por agente entre pasos: el potencial anterior de cada categoría. */
 export interface RewardState {
@@ -15,6 +15,7 @@ export interface RewardState {
   prevAttack: number | null;
   prevEconomy: number | null;
   prevDefense: number | null;
+  prevMilestones: number | null;
   prevEarned: number | null;
   /** Media móvil del oro ganado por tick (suaviza los ingresos a golpes del comercio). */
   rateEma: number | null;
@@ -30,6 +31,7 @@ export const newRewardState = (): RewardState => ({
   prevAttack: null,
   prevEconomy: null,
   prevDefense: null,
+  prevMilestones: null,
   prevEarned: null,
   rateEma: null,
 });
@@ -38,6 +40,24 @@ const clip01 = (x: number): number => Math.max(0, Math.min(1, x));
 const logScale = (x: number, base: number, factor: number): number => clip01(Math.log(Math.max(x, 1) / base) / Math.log(factor));
 
 const finished = (me: Player, t: UnitType): number => me.units(t).filter((u) => u.isActive() && !u.isUnderConstruction()).length;
+
+/** Curva de territorio por tramos (spec §2): el primer tramo, hasta `knee`, paga la fracción `share` del presupuesto. */
+export function territoryPotential(frac: number, knee: number, share: number): number {
+  const f = clip01(frac / WIN_FRAC) * WIN_FRAC;
+  if (knee <= 0 || knee >= WIN_FRAC) return clip01(f / WIN_FRAC);
+  return share * Math.min(f / knee, 1) + (1 - share) * clip01((f - knee) / (WIN_FRAC - knee));
+}
+
+/** Hitos (spec §2b): ciudad, puerto y fábrica terminados, un tercio cada uno. */
+export function milestonePotential(me: Player): number {
+  return ([UnitType.City, UnitType.Port, UnitType.Factory] as const).filter((t) => finished(me, t) > 0).length / 3;
+}
+
+/** Banda de tropas (spec §2c): 1 entre 30 % y 60 % del máximo, cae linealmente a 0 en 10 % y 90 %. */
+export function troopBand(ratio: number): number {
+  if (ratio >= 0.3 && ratio <= 0.6) return 1;
+  return ratio < 0.3 ? clip01((ratio - 0.1) / 0.2) : clip01((0.9 - ratio) / 0.3);
+}
 
 /**
  * Potencial de ataque: tropas máximas que aportan las ciudades terminadas y silos terminados (spec §2). No usa el tope
@@ -88,7 +108,7 @@ export function computeRewardParts(
   const alive = f.afterSpawn && !f.wasEliminated;
   const live = alive && !f.eliminatedNow;
 
-  const terr = clip01(me.numTilesOwned() / f.landTiles / WIN_FRAC);
+  const terr = territoryPotential(me.numTilesOwned() / f.landTiles, cfg.territoryKnee, cfg.territoryKneeShare);
   if (alive) parts.territory = cfg.rewardTerritoryWeight * (terr - st.prevTerritory);
   st.prevTerritory = f.afterSpawn ? terr : 0;
 
@@ -122,6 +142,19 @@ export function computeRewardParts(
       if (st.prevDefense !== null) parts.defense = cfg.rewardDefenseWeight * (phi - st.prevDefense);
       st.prevDefense = phi;
     } else st.prevDefense = null;
+  }
+
+  if (cfg.rewardMilestonesWeight !== 0) {
+    if (live) {
+      const phi = milestonePotential(me);
+      if (st.prevMilestones !== null) parts.milestones = cfg.rewardMilestonesWeight * (phi - st.prevMilestones);
+      st.prevMilestones = phi;
+    } else st.prevMilestones = null;
+  }
+
+  if (cfg.rewardTroopsWeight !== 0 && live) {
+    const steps = Math.max(1, cfg.maxTicks / cfg.decisionInterval);
+    parts.troops = (cfg.rewardTroopsWeight * troopBand(me.troops() / Math.max(1, game.config().maxTroops(me)))) / steps;
   }
 
   parts.terminal = f.wasEliminated ? 0 : f.won ? 1 : f.eliminatedNow ? -1 : 0;

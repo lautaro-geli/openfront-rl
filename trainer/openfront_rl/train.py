@@ -77,7 +77,7 @@ def stack_obs(results: list[Any]) -> tuple[dict[str, np.ndarray], dict[str, np.n
     return obs, mask
 
 
-ABBR = {"conquest": "conq", "territory": "terr", "attack": "atq", "economy": "eco", "defense": "def", "terminal": "fin"}
+ABBR = {"conquest": "conq", "territory": "terr", "attack": "atq", "economy": "eco", "defense": "def", "milestones": "hito", "troops": "trop", "terminal": "fin"}
 
 
 # (etiqueta de consola, evento): lo que se muestra por episodio; el resto queda en metrics.jsonl como ep_ev_*.

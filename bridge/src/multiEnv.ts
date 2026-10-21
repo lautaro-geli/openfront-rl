@@ -57,6 +57,10 @@ export const DEFAULT_CONFIG: EnvConfig = {
   rewardAttackWeight: 0,
   rewardEconomyWeight: 0,
   rewardDefenseWeight: 0,
+  rewardMilestonesWeight: 0,
+  rewardTroopsWeight: 0,
+  territoryKnee: 0,
+  territoryKneeShare: 0.5,
   agents: 1,
 };
 
