@@ -66,7 +66,7 @@ describe("protocolo", () => {
       const m = await c.json(REQ.init, CFG);
       expect(m.type).toBe(RES.manifest);
       const manifest = JSON.parse(m.body.toString("utf8"));
-      expect(manifest.version).toBe(1);
+      expect(manifest.version).toBe(2);
       expect(manifest.agents).toBe(2);
       expect(manifest.actionDims).toBe(ACTION_DIMS);
 

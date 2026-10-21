@@ -21,6 +21,8 @@ interface EnvConfig {
   agents: number;            // jugadores controlados; 1 en OpenFrontEnv
   maxNeighbors: number;      // slots de ataque a jugadores, por defecto 8
   rewardTerritoryWeight: number;  // por defecto 1.0
+  rewardIncomeWeight: number;     // por defecto 0 (apagado); ver reward.md
+  rewardSecurityWeight: number;   // por defecto 0 (apagado)
 }
 
 class OpenFrontEnv {
@@ -80,10 +82,9 @@ Ver [`docs/specs/protocol.md`](protocol.md). Servidor: `bridge/src/server.ts`; c
 Según `docs/specs/reward.md`, con estos valores concretos:
 
 ```
-r = rewardTerritoryWeight * (frac_t − frac_{t−1}) + terminal
-terminal = +1 victoria, −1 eliminación, 0 truncado o sin terminar
+r = territory + income + security + terminal      (docs/specs/reward.md)
 ```
-`info.rewardParts = { territory, terminal }` para registrar cada componente.
+`info.rewardParts = { territory, income, security, terminal }` para registrar cada componente; por el protocolo v2 llegan separados.
 
 ## 7. Requisitos de aceptación (tests)
 1. **Determinismo**: dos entornos con misma config, misma semilla y misma secuencia de acciones dan el mismo `stateHash()` final y la misma suma de recompensas.
@@ -99,6 +100,6 @@ terminal = +1 victoria, −1 eliminación, 0 truncado o sin terminar
 Comunicación con Python, varias partidas en paralelo, construcción de edificios, diplomacia, ataques anfibios, y `miniGameMap`. Cada uno se añade con su propia spec.
 
 ## 9. Preguntas abiertas
-- Valor correcto de `rewardTerritoryWeight` (placeholder).
+- Valores correctos de los pesos de la recompensa (ver `reward.md`; `ppo_base.yaml` trae un punto de partida).
 - ~~Si la malla de muestreo 4 × 4 pierde territorios pequeños en World~~ Medido en ADR 0005: no ve territorios de 1 tile; con 32 × 64 ve el 67–84 % de las celdas ocupadas.
 - Si `maxTicks = 6000` (10 min de juego) alcanza para que la política aleatoria llegue a ver victorias o eliminaciones.

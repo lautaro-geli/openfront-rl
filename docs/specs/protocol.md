@@ -1,4 +1,4 @@
-# Spec: protocolo Node ⇄ Python (v1)
+# Spec: protocolo Node ⇄ Python (v2)
 
 > Estado: **aprobada para implementar** (ADR 0002). Código: `bridge/src/server.ts` (Node) y `trainer/openfront_rl/client.py` (Python).
 
@@ -32,7 +32,7 @@ Un `step` después del fin del episodio, o antes de `reset`, devuelve `0xFF`.
 
 ## 3. Manifiesto
 ```
-{ "version": 1, "agents": A, "grid": {"h":32,"w":64}, "decisionInterval": 10,
+{ "version": 2, "agents": A, "grid": {"h":32,"w":64}, "decisionInterval": 10,
   "obs": { "floats": N, "blocks": [ {"name": "grid", "shape": [20,32,64], "offset": 0}, ... ] },
   "mask": { "bytes": M, "blocks": [ {"name": "kind", "shape": [24], "offset": 0}, ... ] },
   "actionDims": 6 }
@@ -41,7 +41,9 @@ Los bloques salen de `features.ts` y de la spec de acciones; Python no tiene nú
 
 ## 4. Resultado
 Cabecera de 8 bytes: `uint8 done`, `uint8 truncated`, `uint8 agents`, `uint8 reservado`, `int32 tick`. Luego, para cada agente, un bloque de longitud fija:
-`float32 reward`, `uint8 terminated`, `uint8 invalid`, `uint8 won`, `uint8 eliminated`, `float32[N]` observación (orden del manifiesto), `uint8[M]` máscara (orden del manifiesto). Todo little-endian, sin relleno entre campos salvo el de alineación al final de cada bloque a 4 bytes.
+`float32 reward` (suma de los componentes), `uint8 terminated`, `uint8 invalid`, `uint8 won`, `uint8 eliminated`, `float32[4] reward_parts` (`territory, income, security, terminal`; `docs/specs/reward.md`), `float32[N]` observación (orden del manifiesto), `uint8[M]` máscara (orden del manifiesto). Todo little-endian, sin relleno entre campos salvo el de alineación al final de cada bloque a 4 bytes. El manifiesto da `result.agentHeaderBytes` (= 8 + 4 · 4 = 24) y `result.rewardParts` (los nombres).
+
+Cambio de la v1 a la v2: se añadieron `reward_parts` (la observación ya no empieza en el byte 8 del agente sino en `agentHeaderBytes`).
 
 ## 5. Garantías
 - Determinismo: misma `seed` y mismas acciones dan los mismos bytes (test).

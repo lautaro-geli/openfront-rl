@@ -24,11 +24,11 @@ Entrenar una política (PyTorch, PPO + self-play) que juegue partidas completas 
 ## Comandos
 > Se completarán cuando existan (actualizar este bloque en cada fase).
 - Typecheck bridge: `cd bridge && npm run typecheck`
-- Tests bridge: `cd bridge && npm test` (33 tests, ~2-3 min)
+- Tests bridge: `cd bridge && npm test` (36 tests, ~2-3 min)
 - Política aleatoria o heurística: `cd bridge && npm run random -- --policy heuristic --bots 20 --seed s --episodes 4`
-- Tests trainer: `cd trainer && pytest` (8 tests contra el motor real; necesita Node 24, o `OPENFRONT_NODE`)
+- Tests trainer: `cd trainer && pytest` (tests contra el motor real, incluida la red y PPO; necesita Node 24, o `OPENFRONT_NODE`)
 - Medir velocidad: `cd trainer && PYTHONPATH=. python scripts/bench.py --workers 1 5 --map World --bots 400`
-- Entrenar: `cd trainer && python -m openfront_rl.train --config configs/ppo_base.yaml`
+- Entrenar: `cd trainer && python -m openfront_rl.train --config configs/ppo_base.yaml` (crea `runs/<nombre>-<semilla>/` con config, `metrics.jsonl` y checkpoints; `--resume runs/.../latest.pt`)
 
 ## Convenciones
 - Python: tipado con type hints, `ruff` + `black`, `pytest`.
@@ -47,7 +47,7 @@ Entrenar una política (PyTorch, PPO + self-play) que juegue partidas completas 
 - Instalar el motor con `npm ci --ignore-scripts` dentro de `vendor/openfront` (no `npm install`). `node_modules` queda ignorado por git.
 
 ## Estado actual
-**Fases 0 y 1 hechas; Fase 2 hecha en el repo** (falta confirmar la velocidad en el PC del usuario). `bridge/`: observación v2 de 4 ramas (ADR 0006), 24 tipos de acción con máscara (`docs/specs/actions.md`) y servidor del protocolo. `trainer/openfront_rl/`: cliente, entorno en paralelo y Gymnasium. Siguiente: Fase 3, la red por ramas y PPO. ADRs 0003–0005 siguen en "propuesta"; 0002 y 0006 aceptadas.
+**Fases 0, 1 y 2 hechas; Fase 3 escrita y en pruebas** (falta entrenar en el PC del usuario). `bridge/`: observación v2, 24 acciones con máscara, recompensa por componentes (territorio, ingreso, seguridad, terminal; `docs/specs/reward.md`) y protocolo v2. `trainer/openfront_rl/`: cliente, entorno en paralelo, red por ramas con cabezas autorregresivas (`model.py`), PPO (`ppo.py`) y `train.py` (ADR 0007, aceptada). Siguiente: entrenar contra tribus `Easy` en Britannia, comparar con la heurística y pasar a World. ADRs 0003–0005 siguen en "propuesta".
 
 ## Trampa conocida
 `bridge/tsconfig.json` DEBE incluir `../vendor/openfront/packages/*/src/**/*`; si no, `tsx` transpila mal las clases del motor y falla en la primera partida (ver `bridge/README.md`).

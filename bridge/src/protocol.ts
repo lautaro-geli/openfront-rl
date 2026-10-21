@@ -24,8 +24,9 @@ import {
   UNIT_ROWS,
 } from "./features";
 import type { EnvConfig, MultiStepResult, Observation } from "./types";
+import { REWARD_PARTS, zeroParts } from "./reward";
 
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
 export const REQ = { init: 0x01, reset: 0x02, step: 0x03, hash: 0x04, close: 0x05 } as const;
 export const RES = { manifest: 0x81, result: 0x82, hash: 0x83, closed: 0x84, error: 0xff } as const;
@@ -74,20 +75,22 @@ export function maskBlocks(cfg: Pick<EnvConfig, "grid" | "maxNeighbors">): Block
   ];
 }
 
+/** reward + 4 banderas + una recompensa por componente. */
+export const AGENT_HEADER = 8 + 4 * REWARD_PARTS.length;
 const size = (shape: number[]): number => shape.reduce((a, b) => a * b, 1);
 const align4 = (n: number): number => (n + 3) & ~3;
 
 export interface Layout {
   obsFloats: number;
   maskBytes: number;
-  /** Bytes de un agente en el resultado: reward + 4 banderas + observación + máscara (alineado a 4). */
+  /** Bytes de un agente en el resultado: reward + 4 banderas + componentes + observación + máscara (alineado a 4). */
   agentBytes: number;
 }
 
 export function layout(cfg: Pick<EnvConfig, "grid" | "maxNeighbors">): Layout {
   const obsFloats = obsBlocks(cfg).reduce((s, b) => s + size(b.shape), 0);
   const maskBytes = maskBlocks(cfg).reduce((s, b) => s + size(b.shape), 0);
-  return { obsFloats, maskBytes, agentBytes: align4(8 + obsFloats * 4 + maskBytes) };
+  return { obsFloats, maskBytes, agentBytes: align4(AGENT_HEADER + obsFloats * 4 + maskBytes) };
 }
 
 export function buildManifest(cfg: EnvConfig): object {
@@ -123,7 +126,7 @@ export function buildManifest(cfg: EnvConfig): object {
     },
     obs: { dtype: "float32", floats: l.obsFloats, blocks: place(obsBlocks(cfg)) },
     mask: { dtype: "uint8", bytes: l.maskBytes, blocks: place(maskBlocks(cfg)) },
-    result: { headerBytes: 8, agentBytes: l.agentBytes },
+    result: { headerBytes: 8, agentHeaderBytes: AGENT_HEADER, agentBytes: l.agentBytes, rewardParts: REWARD_PARTS },
   };
 }
 
@@ -146,13 +149,14 @@ export function encodeResult(cfg: EnvConfig, r: MultiStepResult, tick: number): 
     dv.setUint8(base + 5, r.info[a].invalidAction ? 1 : 0);
     dv.setUint8(base + 6, r.info[a].won ? 1 : 0);
     dv.setUint8(base + 7, r.info[a].eliminated ? 1 : 0);
-    const floats = new Float32Array(ab, base + 8, l.obsFloats);
+    REWARD_PARTS.forEach((n, k) => dv.setFloat32(base + 8 + 4 * k, r.info[a].rewardParts[n], true));
+    const floats = new Float32Array(ab, base + AGENT_HEADER, l.obsFloats);
     let o = 0;
     for (const b of oBlocks) {
       floats.set(b.get(r.obs[a]) as ArrayLike<number>, o);
       o += size(b.shape);
     }
-    const bytes = new Uint8Array(ab, base + 8 + l.obsFloats * 4, l.maskBytes);
+    const bytes = new Uint8Array(ab, base + AGENT_HEADER + l.obsFloats * 4, l.maskBytes);
     let m = 0;
     for (const b of mBlocks) {
       bytes.set(b.get(r.obs[a]) as ArrayLike<number>, m);
@@ -173,7 +177,7 @@ export function resetResult(obs: Observation[]): MultiStepResult {
     done: false,
     info: Array.from({ length: A }, () => ({
       invalidAction: false,
-      rewardParts: { territory: 0, terminal: 0 },
+      rewardParts: zeroParts(),
       won: false,
       eliminated: false,
       tick: obs[0]?.tick ?? 0,

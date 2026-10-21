@@ -23,6 +23,7 @@ import { GameRunner } from "@openfront/engine/GameRunner";
 import { loadMapFiles } from "@openfront/shared/GameMapLoader";
 import { actionToIntents, computeMaskInfo, type MaskInfo } from "./actions";
 import { emptyMask } from "./mask";
+import { computeRewardParts, newRewardState, sumParts, type RewardState } from "./reward";
 import { FsMapLoader } from "./mapLoader";
 import {
   buildFrame,
@@ -49,6 +50,8 @@ export const DEFAULT_CONFIG: EnvConfig = {
   samples: 4,
   maxNeighbors: 8,
   rewardTerritoryWeight: 1.0,
+  rewardIncomeWeight: 0,
+  rewardSecurityWeight: 0,
   agents: 1,
 };
 
@@ -59,7 +62,7 @@ export function clientIdFor(index: number): string {
 interface Agent {
   clientID: string;
   me: Player;
-  prevFrac: number;
+  rs: RewardState;
   eliminated: boolean;
   /** Máscara calculada al devolver la última observación; el estado no cambia hasta el siguiente step. */
   maskInfo: MaskInfo | null;
@@ -179,7 +182,7 @@ export class MultiAgentEnv {
     ep.agents = start.players.map((p) => {
       const me = game.playerByClientID(p.clientID);
       if (me === null) throw new Error(`el jugador ${p.clientID} no existe en la partida`);
-      return { clientID: p.clientID, me, prevFrac: 0, eliminated: false, maskInfo: null };
+      return { clientID: p.clientID, me, rs: newRewardState(), eliminated: false, maskInfo: null };
     });
     ep.plan = buildSamplePlan(game, cfg.grid.h, cfg.grid.w, cfg.samples);
     ep.rates = new RateTracker();
@@ -237,17 +240,14 @@ export class MultiAgentEnv {
     agents.forEach((a, i) => {
       const wasEliminated = a.eliminated;
       const eliminatedNow = afterSpawn && !a.me.isAlive();
-      const frac = a.me.numTilesOwned() / landTiles;
-      const territory = wasEliminated || !afterSpawn ? 0 : cfg.rewardTerritoryWeight * (frac - a.prevFrac);
-      a.prevFrac = afterSpawn ? frac : 0;
       const won = ep.sawWin && winner === a.me;
-      const terminal = wasEliminated ? 0 : won ? 1 : eliminatedNow ? -1 : 0;
+      const parts = computeRewardParts(game, a.me, a.rs, cfg, { afterSpawn, wasEliminated, eliminatedNow, won, landTiles });
       a.eliminated = a.eliminated || eliminatedNow;
-      reward.push(territory + terminal);
+      reward.push(sumParts(parts));
       terminatedFlags.push(a.eliminated || ep.sawWin);
       info.push({
         invalidAction: invalid[i],
-        rewardParts: { territory, terminal },
+        rewardParts: parts,
         won,
         eliminated: a.eliminated,
         tick: game.ticks(),

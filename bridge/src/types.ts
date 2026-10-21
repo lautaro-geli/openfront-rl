@@ -17,11 +17,15 @@ export interface EnvConfig {
   samples: number;
   maxNeighbors: number;
   rewardTerritoryWeight: number;
+  /** Pesos de los demás componentes (docs/specs/reward.md). 0 = apagado. */
+  rewardIncomeWeight: number;
+  rewardSecurityWeight: number;
   /** Número de jugadores controlados por código en la partida (MultiAgentEnv). */
   agents: number;
 }
 
 import type { ActionKind } from "./features";
+import type { RewardParts } from "./reward";
 
 /** Acciones de la v0, con su forma original (las usan las políticas aleatoria y heurística). */
 export type LegacyAction =
@@ -89,7 +93,7 @@ export interface Observation {
 
 export interface StepInfo {
   invalidAction: boolean;
-  rewardParts: { territory: number; terminal: number };
+  rewardParts: RewardParts;
   won: boolean;
   eliminated: boolean;
   tick: number;
