@@ -18,8 +18,9 @@ export interface EnvConfig {
   maxNeighbors: number;
   rewardTerritoryWeight: number;
   /** Pesos de los demás componentes (docs/specs/reward.md). 0 = apagado. */
-  rewardIncomeWeight: number;
-  rewardSecurityWeight: number;
+  rewardAttackWeight: number;
+  rewardEconomyWeight: number;
+  rewardDefenseWeight: number;
   /** Número de jugadores controlados por código en la partida (MultiAgentEnv). */
   agents: number;
 }

@@ -10,7 +10,7 @@ async function play(cfg: Partial<EnvConfig>, seed: string, steps = 80) {
   const env = await MultiAgentEnv.create(cfg);
   const policy = new RandomPolicy(seed, env.cfg.grid);
   let obs = await env.reset(seed);
-  const totals = { territory: 0, income: 0, security: 0, terminal: 0 };
+  const totals = { territory: 0, attack: 0, economy: 0, defense: 0, terminal: 0 };
   let reward = 0;
   let maxSecAbs = 0;
   for (let i = 0; i < steps; i++) {
@@ -18,7 +18,7 @@ async function play(cfg: Partial<EnvConfig>, seed: string, steps = 80) {
     obs = r.obs;
     reward += r.reward[0];
     for (const k of REWARD_PARTS) totals[k] += r.info[0].rewardParts[k];
-    maxSecAbs = Math.max(maxSecAbs, Math.abs(r.info[0].rewardParts.security));
+    maxSecAbs = Math.max(maxSecAbs, Math.abs(r.info[0].rewardParts.defense));
     expect(Math.abs(r.reward[0] - REWARD_PARTS.reduce((s, k) => s + r.info[0].rewardParts[k], 0))).toBeLessThan(1e-6);
     if (r.done) break;
   }
@@ -29,20 +29,24 @@ async function play(cfg: Partial<EnvConfig>, seed: string, steps = 80) {
 describe("recompensa por componentes", () => {
   it("con los pesos por defecto solo hay territorio y terminal (igual que la v0)", async () => {
     const a = await play(BASE, "rw-1");
-    expect(a.totals.income).toBe(0);
-    expect(a.totals.security).toBe(0);
+    expect(a.totals.attack).toBe(0);
+    expect(a.totals.economy).toBe(0);
+    expect(a.totals.defense).toBe(0);
     expect(Math.abs(a.reward - (a.totals.territory + a.totals.terminal))).toBeLessThan(1e-6);
   }, 120000);
 
-  it("con ingreso y seguridad activos las partes son reproducibles y acotadas", async () => {
-    const cfg = { ...BASE, rewardIncomeWeight: 0.2, rewardSecurityWeight: 0.1 };
+  it("con todas las categorías activas las partes son reproducibles y respetan su presupuesto", async () => {
+    const cfg = { ...BASE, rewardTerritoryWeight: 0.4, rewardAttackWeight: 0.15, rewardEconomyWeight: 0.1, rewardDefenseWeight: 0.05 };
     const a = await play(cfg, "rw-2");
     const b = await play(cfg, "rw-2");
     expect(a.hash).toBe(b.hash);
     for (const k of REWARD_PARTS) expect(a.totals[k]).toBe(b.totals[k]);
-    expect(Number.isFinite(a.totals.income)).toBe(true);
-    expect(Math.abs(a.totals.income)).toBeLessThan(0.2 * Math.log(1e6)); // telescópica: w · (Φ_final − Φ_inicial)
-    expect(a.maxSecAbs).toBeLessThanOrEqual(0.1 + 1e-9);
+    // Telescópicas: el acumulado de cada categoría está en [−peso, +peso].
+    expect(Math.abs(a.totals.territory)).toBeLessThanOrEqual(0.4 + 1e-6);
+    expect(Math.abs(a.totals.attack)).toBeLessThanOrEqual(0.15 + 1e-6);
+    expect(Math.abs(a.totals.economy)).toBeLessThanOrEqual(0.1 + 1e-6);
+    expect(Math.abs(a.totals.defense)).toBeLessThanOrEqual(0.05 + 1e-6);
+    expect(a.maxSecAbs).toBeLessThanOrEqual(0.05 + 1e-9);
     // La partida no cambia por activar el shaping (la recompensa no toca el motor).
     const c = await play(BASE, "rw-2");
     expect(c.hash).toBe(a.hash);

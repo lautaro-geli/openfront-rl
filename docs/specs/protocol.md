@@ -41,7 +41,7 @@ Los bloques salen de `features.ts` y de la spec de acciones; Python no tiene nú
 
 ## 4. Resultado
 Cabecera de 8 bytes: `uint8 done`, `uint8 truncated`, `uint8 agents`, `uint8 reservado`, `int32 tick`. Luego, para cada agente, un bloque de longitud fija:
-`float32 reward` (suma de los componentes), `uint8 terminated`, `uint8 invalid`, `uint8 won`, `uint8 eliminated`, `float32[4] reward_parts` (`territory, income, security, terminal`; `docs/specs/reward.md`), `float32[N]` observación (orden del manifiesto), `uint8[M]` máscara (orden del manifiesto). Todo little-endian, sin relleno entre campos salvo el de alineación al final de cada bloque a 4 bytes. El manifiesto da `result.agentHeaderBytes` (= 8 + 4 · 4 = 24) y `result.rewardParts` (los nombres).
+`float32 reward` (suma de los componentes), `uint8 terminated`, `uint8 invalid`, `uint8 won`, `uint8 eliminated`, `float32[5] reward_parts` (`territory, attack, economy, defense, terminal`; `docs/specs/reward.md`), `float32[N]` observación (orden del manifiesto), `uint8[M]` máscara (orden del manifiesto). Todo little-endian, sin relleno entre campos salvo el de alineación al final de cada bloque a 4 bytes. El manifiesto da `result.agentHeaderBytes` (= 8 + 4 · 5 = 28) y `result.rewardParts` (los nombres).
 
 Cambio de la v1 a la v2: se añadieron `reward_parts` (la observación ya no empieza en el byte 8 del agente sino en `agentHeaderBytes`).
 

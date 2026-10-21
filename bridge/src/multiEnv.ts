@@ -49,9 +49,10 @@ export const DEFAULT_CONFIG: EnvConfig = {
   grid: { h: 32, w: 64 },
   samples: 4,
   maxNeighbors: 8,
-  rewardTerritoryWeight: 1.0,
-  rewardIncomeWeight: 0,
-  rewardSecurityWeight: 0,
+  rewardTerritoryWeight: 0.8,
+  rewardAttackWeight: 0,
+  rewardEconomyWeight: 0,
+  rewardDefenseWeight: 0,
   agents: 1,
 };
 

@@ -88,6 +88,7 @@ class Runner:
         episodes: list[dict[str, Any]] = []
         n = self.vec.n
         invalid = 0
+        self.kind_counts[:] = 0  # el histograma de acciones es por actualización, no acumulado
         for t in range(buf.T):
             buf.add_obs(t, self.obs, self.mask)
             act, logp, _, val = self._act(self.obs, self.mask, greedy)
@@ -131,6 +132,7 @@ def evaluate(policy: Policy, env_cfg: dict[str, Any], workers: int, episodes: in
     done: list[dict[str, float]] = []
     with VecGame(n, {**env_cfg, "agents": 1}, base_seed=f"eval-{seed}") as vec:
         res = vec.reset()
+        acc = np.zeros((n, len(vec.manifest.reward_parts)))  # suma de componentes del episodio en curso, por entorno
         guard = 0
         while len(done) < episodes and guard < 5000:
             guard += 1
@@ -138,10 +140,15 @@ def evaluate(policy: Policy, env_cfg: dict[str, Any], workers: int, episodes: in
             with torch.no_grad():
                 act, *_ = policy(*to_tensors(obs, mask, device))
             res = vec.step(act.cpu().numpy().astype(np.int32).reshape(n, 1, -1))
-            for i, fin in enumerate(vec.final):
-                if fin is not None and len(done) < episodes:
-                    p = dict(zip(vec.manifest.reward_parts, fin.reward_parts[0].tolist()))
-                    done.append({"won": float(fin.won[0]), "eliminated": float(fin.eliminated[0]), "territory": p["territory"]})
+            for i in range(n):
+                fin = vec.final[i]
+                acc[i] += (fin if fin is not None else res[i]).reward_parts[0]
+                if fin is not None:
+                    if len(done) < episodes:
+                        p = dict(zip(vec.manifest.reward_parts, acc[i].tolist()))
+                        done.append({"won": float(fin.won[0]), "eliminated": float(fin.eliminated[0]),
+                                     "return": float(sum(p.values())), **{f"part_{k}": v for k, v in p.items()}})
+                    acc[i] = 0
     keys = done[0].keys() if done else []
     return {f"eval_{k}": float(np.mean([d[k] for d in done])) for k in keys} | {"eval_episodes": float(len(done))}
 
@@ -207,6 +214,7 @@ def train(cfg: dict[str, Any], run_dir: str | Path | None = None, resume: str | 
                     "t_rollout": round(t_roll, 2), "t_update": round(time.time() - tu, 2),
                     "reward_scale": rstd.std, "ent_coef": ent_coef, **stats, **info,
                     "noop_frac": float(runner.kind_counts[0] / max(1, runner.kind_counts.sum())),
+                    "kind_frac": (runner.kind_counts / max(1, runner.kind_counts.sum())).round(4).tolist(),
                     "step_reward_mean": float(buf.reward.mean()),
                 }
                 if episodes:
@@ -219,8 +227,9 @@ def train(cfg: dict[str, Any], run_dir: str | Path | None = None, resume: str | 
                 mf.write(json.dumps(row) + "\n")
                 mf.flush()
                 if log:
+                    pr = " ".join(f"{k[:3]}={row[f'ep_part_{k}']:+.3f}" for k in runner.parts if f"ep_part_{k}" in row)
                     print(f"[{u}/{total}] steps={steps} r/step={row['step_reward_mean']:+.4f} "
-                          f"ep_ret={row.get('ep_return', float('nan')):+.3f} ent={stats['ent']:.2f} kl={stats['kl']:.4f} "
+                          f"ep_ret={row.get('ep_return', float('nan')):+.3f} ({pr}) ent={stats['ent']:.2f} kl={stats['kl']:.4f} "
                           f"inv={info['invalid_rate']:.2f} noop={row['noop_frac']:.2f} "
                           f"roll={t_roll:.1f}s upd={row['t_update']:.1f}s", flush=True)
                 if u % cfg["checkpoint_every"] == 0 or u == total:

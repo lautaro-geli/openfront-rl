@@ -18,9 +18,10 @@ env:
   maxTicks: 6000
   grid: {h: 32, w: 64}
   samples: 4
-  rewardTerritoryWeight: 1.0
-  rewardIncomeWeight: 0.2
-  rewardSecurityWeight: 0.1
+  rewardTerritoryWeight: 0.40
+  rewardAttackWeight: 0.15
+  rewardEconomyWeight: 0.10
+  rewardDefenseWeight: 0.05
 model: {}
 ppo:
   gamma: 0.997

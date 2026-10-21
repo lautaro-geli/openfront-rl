@@ -47,7 +47,7 @@ Entrenar una política (PyTorch, PPO + self-play) que juegue partidas completas 
 - Instalar el motor con `npm ci --ignore-scripts` dentro de `vendor/openfront` (no `npm install`). `node_modules` queda ignorado por git.
 
 ## Estado actual
-**Fases 0, 1 y 2 hechas; Fase 3 escrita y en pruebas** (falta entrenar en el PC del usuario). `bridge/`: observación v2, 24 acciones con máscara, recompensa por componentes (territorio, ingreso, seguridad, terminal; `docs/specs/reward.md`) y protocolo v2. `trainer/openfront_rl/`: cliente, entorno en paralelo, red por ramas con cabezas autorregresivas (`model.py`), PPO (`ppo.py`) y `train.py` (ADR 0007, aceptada). Siguiente: entrenar contra tribus `Easy` en Britannia, comparar con la heurística y pasar a World. ADRs 0003–0005 siguen en "propuesta".
+**Fases 0, 1 y 2 hechas; Fase 3 escrita y en pruebas** (falta entrenar en el PC del usuario). `bridge/`: observación v2, 24 acciones con máscara, recompensa v2 por categorías con presupuesto (terminal > territorio > ataque > economía > defensa; `docs/specs/reward.md`) y protocolo v2. `trainer/openfront_rl/`: cliente, entorno en paralelo, red por ramas con cabezas autorregresivas (`model.py`), PPO (`ppo.py`) y `train.py` (ADR 0007, aceptada). Siguiente: entrenar contra tribus `Easy` en Britannia, comparar con la heurística y pasar a World. ADRs 0003–0005 siguen en "propuesta".
 
 ## Trampa conocida
 `bridge/tsconfig.json` DEBE incluir `../vendor/openfront/packages/*/src/**/*`; si no, `tsx` transpila mal las clases del motor y falla en la primera partida (ver `bridge/README.md`).

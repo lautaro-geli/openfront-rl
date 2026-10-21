@@ -21,8 +21,9 @@ interface EnvConfig {
   agents: number;            // jugadores controlados; 1 en OpenFrontEnv
   maxNeighbors: number;      // slots de ataque a jugadores, por defecto 8
   rewardTerritoryWeight: number;  // por defecto 1.0
-  rewardIncomeWeight: number;     // por defecto 0 (apagado); ver reward.md
-  rewardSecurityWeight: number;   // por defecto 0 (apagado)
+  rewardAttackWeight: number;     // por defecto 0 (apagado); ver reward.md
+  rewardEconomyWeight: number;    // por defecto 0 (apagado)
+  rewardDefenseWeight: number;    // por defecto 0 (apagado)
 }
 
 class OpenFrontEnv {
@@ -82,9 +83,9 @@ Ver [`docs/specs/protocol.md`](protocol.md). Servidor: `bridge/src/server.ts`; c
 Según `docs/specs/reward.md`, con estos valores concretos:
 
 ```
-r = territory + income + security + terminal      (docs/specs/reward.md)
+r = territory + attack + economy + defense + terminal      (docs/specs/reward.md)
 ```
-`info.rewardParts = { territory, income, security, terminal }` para registrar cada componente; por el protocolo v2 llegan separados.
+`info.rewardParts = { territory, attack, economy, defense, terminal }` para registrar cada componente; por el protocolo v2 llegan separados.
 
 ## 7. Requisitos de aceptación (tests)
 1. **Determinismo**: dos entornos con misma config, misma semilla y misma secuencia de acciones dan el mismo `stateHash()` final y la misma suma de recompensas.
