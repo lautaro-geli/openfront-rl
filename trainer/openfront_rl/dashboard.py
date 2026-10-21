@@ -79,7 +79,7 @@ class Panel:
         try:
             procs = [p, *p.children(recursive=True)]
             procs = [self._cache.setdefault(q.pid, q) for q in procs]
-            return {"cpu": round(sum(q.cpu_percent(interval=None) for q in procs), 1),
+            return {"cpu": round(sum(q.cpu_percent(interval=None) for q in procs) / (psutil.cpu_count() or 1), 1),
                     "mem_mb": round(sum(q.memory_info().rss for q in procs) / 2**20, 0), "procs": len(procs)}
         except psutil.Error:
             return {"cpu": 0.0, "mem_mb": 0.0, "procs": 0}

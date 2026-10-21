@@ -32,5 +32,8 @@ goals:
 3. **Arquitectura**: ramas → núcleo → cabezas con parámetros reales (`architecture.json`).
 4. **Metas**: lista de hitos con barra de avance y estado.
 
-## 5. Seguridad
+## 5. CPU y prioridad
+`cpu` es el uso del árbol de procesos del run **como porcentaje de toda la PC** (0–100, igual que el Administrador de tareas): la suma de `cpu_percent` de cada proceso dividida por el número de CPU lógicas. `train.py` acepta dos ajustes de configuración: `torch_threads` (hilos de PyTorch; por defecto, los núcleos físicos) y `low_priority` (por defecto `true`: el entrenamiento y sus procesos Node corren con prioridad por debajo de lo normal, para que la PC siga usable).
+
+## 6. Seguridad
 Escucha solo en `127.0.0.1`; no hay autenticación. Los nombres de run se validan (`[A-Za-z0-9_.-]+`) para no salir de `runs/`. Solo se lanza `python -m openfront_rl.train` con argumentos de la lista cerrada.

@@ -120,7 +120,7 @@ async function viewProcesos(m) {
     h("label", {}, "Reanudar", h("input", {name: "resume", type: "checkbox"})),
     h("button", {class: "pri", type: "submit"}, "Lanzar"));
   const act = (name, cmd, label, cls = "") => h("button", {class: "b " + cls, onclick: async () => { try { await (cmd === "kill" ? api(`/runs/${name}/kill`, {}) : api(`/runs/${name}/control`, {command: cmd})); } catch (e) { alert(e.message); } render(); }}, label);
-  const tbl = h("table", {}, h("thead", {}, h("tr", {}, ["Run", "Estado", "Actualización", "Pasos/s", "Retorno", "CPU %", "Mem MB", "Procesos", ""].map(t => h("th", {}, t)))),
+  const tbl = h("table", {}, h("thead", {}, h("tr", {}, ["Run", "Estado", "Actualización", "Pasos/s", "Retorno", "CPU PC %", "Mem MB", "Procesos", ""].map(t => h("th", {}, t)))),
     h("tbody", {}, runs.map(r => h("tr", {}, h("td", {}, h("a", {href: "#", onclick: e => { e.preventDefault(); run = r.name; tab = "run"; metrics = []; lastUpdate = 0; nav(); render(); }}, r.name)), h("td", {}, pill(r.state)),
       h("td", {}, r.total ? `${r.update}/${r.total}` : r.update), h("td", {}, fmt(r.steps_per_s, 0)), h("td", {}, fmt(r.ep_return, 3)), h("td", {}, fmt(r.cpu, 0)), h("td", {}, fmt(r.mem_mb, 0)), h("td", {}, r.procs ?? "–"),
       h("td", {}, r.state === "running" ? [act(r.name, "pause", "Pausar"), " ", act(r.name, "stop", "Detener"), " ", act(r.name, "kill", "Matar", "red")] : r.state === "paused" ? [act(r.name, "run", "Reanudar"), " ", act(r.name, "stop", "Detener"), " ", act(r.name, "kill", "Matar", "red")] : r.state === "caído" ? "" : "")))));
@@ -143,7 +143,7 @@ async function viewRun(m) {
   const labels = ["ataques", "ataques a tribus", "tribus conquistadas", "misiles", "construcciones"];
   m.replaceChildren(
     h("div", {class: "card"}, h("div", {class: "row"}, h("div", {class: "box"}, h("b", {}, run), pill(st.state), " ", st.state === "running" ? h("button", {class: "b", onclick: () => api(`/runs/${run}/control`, {command: "pause"}).then(render)}, "Pausar") : st.state === "paused" ? h("button", {class: "b", onclick: () => api(`/runs/${run}/control`, {command: "run"}).then(render)}, "Reanudar") : ""),
-      h("div", {class: "box grid"}, stat("Actualización", s.total ? `${s.update}/${s.total}` : fmt(s.update, 0)), stat("Pasos totales", fmt(s.steps, 0)), stat("Pasos/s", fmt(s.steps_per_s, 0)), stat("CPU %", fmt(u.cpu, 0)), stat("Memoria MB", fmt(u.mem_mb, 0)))),
+      h("div", {class: "box grid"}, stat("Actualización", s.total ? `${s.update}/${s.total}` : fmt(s.update, 0)), stat("Pasos totales", fmt(s.steps, 0)), stat("Pasos/s", fmt(s.steps_per_s, 0)), stat("CPU de la PC %", fmt(u.cpu, 0)), stat("Memoria MB", fmt(u.mem_mb, 0)))),
       h("div", {class: "bar", style: "margin-top:10px"}, h("i", {style: `width:${prog}%`}))),
     h("div", {class: "card"}, h("h2", {}, "Workers (partida en curso de cada uno)"), workers.length ? h("div", {class: "row"}, workers) : h("span", {class: "muted"}, "sin datos todavía")),
     h("div", {class: "charts"},

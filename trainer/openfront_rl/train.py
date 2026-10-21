@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 import numpy as np
+import psutil
 import torch
 import yaml
 
@@ -30,6 +31,8 @@ DEFAULTS: dict[str, Any] = {
     "seed": 0,
     "device": "cpu",
     "workers": None,  # None = núcleos − 1
+    "torch_threads": None,  # None = núcleos físicos (en CPU con hyperthreading, usar todos los lógicos hace girar hilos en vacío)
+    "low_priority": True,  # entrenamiento y procesos Node con prioridad por debajo de lo normal: la PC sigue usable
     "rollout_steps": 128,
     "updates": 1000,
     "checkpoint_every": 25,
@@ -178,8 +181,20 @@ def save_checkpoint(path: Path, policy: Policy, opt: torch.optim.Optimizer, upda
     }, path)
 
 
+def apply_resources(cfg: dict[str, Any]) -> None:
+    """Limita los hilos de PyTorch y baja la prioridad (los procesos Node que se lancen después la heredan)."""
+    threads = cfg.get("torch_threads") or psutil.cpu_count(logical=False) or 1
+    torch.set_num_threads(int(threads))
+    if cfg.get("low_priority"):
+        try:
+            psutil.Process().nice(psutil.BELOW_NORMAL_PRIORITY_CLASS if hasattr(psutil, "BELOW_NORMAL_PRIORITY_CLASS") else 10)
+        except (psutil.Error, OSError):
+            pass
+
+
 def train(cfg: dict[str, Any], run_dir: str | Path | None = None, resume: str | Path | None = None, log: bool = True) -> Path:
     seed = int(cfg["seed"])
+    apply_resources(cfg)
     torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
     device = torch.device(cfg["device"])
