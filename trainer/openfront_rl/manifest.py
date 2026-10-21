@@ -5,7 +5,7 @@ import math
 from dataclasses import dataclass
 from typing import Any
 
-SUPPORTED_VERSION = 2
+SUPPORTED_VERSION = 3
 # Bloques que este cliente conoce. Si el servidor cambia el contrato, falla al arrancar, no a mitad del entrenamiento.
 KNOWN_OBS = {
     "grid", "globals", "econ_table", "econ_valid", "econ_scalars", "mil_units", "mil_units_valid",
@@ -38,6 +38,7 @@ class Manifest:
     header_bytes: int
     agent_header_bytes: int
     reward_parts: tuple[str, ...]
+    event_names: tuple[str, ...]
     action_dims: int
     obs: dict[str, Block]
     mask: dict[str, Block]
@@ -65,6 +66,7 @@ class Manifest:
             header_bytes=raw["result"]["headerBytes"],
             agent_header_bytes=raw["result"]["agentHeaderBytes"],
             reward_parts=tuple(raw["result"]["rewardParts"]),
+            event_names=tuple(raw["result"]["eventNames"]),
             action_dims=raw["actionDims"],
             obs=blocks(raw["obs"], KNOWN_OBS),
             mask=blocks(raw["mask"], KNOWN_MASK),

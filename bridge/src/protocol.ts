@@ -24,9 +24,10 @@ import {
   UNIT_ROWS,
 } from "./features";
 import type { EnvConfig, MultiStepResult, Observation } from "./types";
+import { EVENT_NAMES, zeroEvents } from "./events";
 import { REWARD_PARTS, zeroParts } from "./reward";
 
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 export const REQ = { init: 0x01, reset: 0x02, step: 0x03, hash: 0x04, close: 0x05 } as const;
 export const RES = { manifest: 0x81, result: 0x82, hash: 0x83, closed: 0x84, error: 0xff } as const;
@@ -75,8 +76,8 @@ export function maskBlocks(cfg: Pick<EnvConfig, "grid" | "maxNeighbors">): Block
   ];
 }
 
-/** reward + 4 banderas + una recompensa por componente. */
-export const AGENT_HEADER = 8 + 4 * REWARD_PARTS.length;
+/** reward + 4 banderas + una recompensa por componente + un recuento por evento. */
+export const AGENT_HEADER = 8 + 4 * REWARD_PARTS.length + 4 * EVENT_NAMES.length;
 const size = (shape: number[]): number => shape.reduce((a, b) => a * b, 1);
 const align4 = (n: number): number => (n + 3) & ~3;
 
@@ -126,7 +127,7 @@ export function buildManifest(cfg: EnvConfig): object {
     },
     obs: { dtype: "float32", floats: l.obsFloats, blocks: place(obsBlocks(cfg)) },
     mask: { dtype: "uint8", bytes: l.maskBytes, blocks: place(maskBlocks(cfg)) },
-    result: { headerBytes: 8, agentHeaderBytes: AGENT_HEADER, agentBytes: l.agentBytes, rewardParts: REWARD_PARTS },
+    result: { headerBytes: 8, agentHeaderBytes: AGENT_HEADER, agentBytes: l.agentBytes, rewardParts: REWARD_PARTS, eventNames: EVENT_NAMES },
   };
 }
 
@@ -150,6 +151,8 @@ export function encodeResult(cfg: EnvConfig, r: MultiStepResult, tick: number): 
     dv.setUint8(base + 6, r.info[a].won ? 1 : 0);
     dv.setUint8(base + 7, r.info[a].eliminated ? 1 : 0);
     REWARD_PARTS.forEach((n, k) => dv.setFloat32(base + 8 + 4 * k, r.info[a].rewardParts[n], true));
+    const evBase = base + 8 + 4 * REWARD_PARTS.length;
+    EVENT_NAMES.forEach((n, k) => dv.setFloat32(evBase + 4 * k, r.info[a].events[n], true));
     const floats = new Float32Array(ab, base + AGENT_HEADER, l.obsFloats);
     let o = 0;
     for (const b of oBlocks) {
@@ -178,6 +181,7 @@ export function resetResult(obs: Observation[]): MultiStepResult {
     info: Array.from({ length: A }, () => ({
       invalidAction: false,
       rewardParts: zeroParts(),
+      events: zeroEvents(),
       won: false,
       eliminated: false,
       tick: obs[0]?.tick ?? 0,

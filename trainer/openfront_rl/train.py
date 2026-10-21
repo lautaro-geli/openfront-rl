@@ -66,6 +66,10 @@ def stack_obs(results: list[Any]) -> tuple[dict[str, np.ndarray], dict[str, np.n
 ABBR = {"territory": "terr", "attack": "atq", "economy": "eco", "defense": "def", "terminal": "fin"}
 
 
+# (etiqueta de consola, evento): lo que se muestra por episodio; el resto queda en metrics.jsonl como ep_ev_*.
+EV_SHOW = [("atq", "attack_orders"), ("a_trib", "attack_tribe_orders"), ("tribus", "tribes_conquered"), ("nuke", "nuke_orders")]
+
+
 class Runner:
     """Juega N partidas a la vez con la política y llena el buffer."""
 
@@ -77,6 +81,7 @@ class Runner:
         self.obs, self.mask = stack_obs(self.results)
         n = vec.n
         self.ep_parts = np.zeros((n, len(self.parts)))
+        self.ep_events = np.zeros((n, len(self.m.event_names)))
         self.ep_len = np.zeros(n, int)
         self.ep_invalid = np.zeros(n, int)
         self.kind_counts = np.zeros(len(self.m.space["kinds"]))
@@ -104,6 +109,7 @@ class Runner:
                 r = fin if fin is not None else results[i]
                 buf.reward[t, i] = r.reward[0]
                 self.ep_parts[i] += r.reward_parts[0]
+                self.ep_events[i] += r.events[0]
                 self.ep_len[i] += 1
                 invalid += int(r.invalid[0])
                 self.ep_invalid[i] += int(r.invalid[0])
@@ -117,8 +123,10 @@ class Runner:
                         "return": float(sum(p.values())), "length": int(self.ep_len[i]), "won": bool(fin.won[0]),
                         "eliminated": bool(fin.eliminated[0]), "truncated": bool(fin.truncated),
                         "invalid": int(self.ep_invalid[i]), **{f"part_{k}": v for k, v in p.items()},
+                        **{f"ev_{k}": v for k, v in zip(self.m.event_names, self.ep_events[i].tolist())},
                     })
                     self.ep_parts[i] = 0
+                    self.ep_events[i] = 0
                     self.ep_len[i] = 0
                     self.ep_invalid[i] = 0
             self.results = results
@@ -136,6 +144,7 @@ def evaluate(policy: Policy, env_cfg: dict[str, Any], workers: int, episodes: in
     with VecGame(n, {**env_cfg, "agents": 1}, base_seed=f"eval-{seed}") as vec:
         res = vec.reset()
         acc = np.zeros((n, len(vec.manifest.reward_parts)))  # suma de componentes del episodio en curso, por entorno
+        evs = np.zeros((n, len(vec.manifest.event_names)))
         guard = 0
         while len(done) < episodes and guard < 20000:
             guard += 1
@@ -146,12 +155,15 @@ def evaluate(policy: Policy, env_cfg: dict[str, Any], workers: int, episodes: in
             for i in range(n):
                 fin = vec.final[i]
                 acc[i] += (fin if fin is not None else res[i]).reward_parts[0]
+                evs[i] += (fin if fin is not None else res[i]).events[0]
                 if fin is not None:
                     if len(done) < episodes:
                         p = dict(zip(vec.manifest.reward_parts, acc[i].tolist()))
                         done.append({"won": float(fin.won[0]), "eliminated": float(fin.eliminated[0]),
-                                     "return": float(sum(p.values())), **{f"part_{k}": v for k, v in p.items()}})
+                                     "return": float(sum(p.values())), **{f"part_{k}": v for k, v in p.items()},
+                                     **{f"ev_{k}": v for k, v in zip(vec.manifest.event_names, evs[i].tolist())}})
                     acc[i] = 0
+                    evs[i] = 0
     keys = done[0].keys() if done else []
     return {f"eval_{k}": float(np.mean([d[k] for d in done])) for k in keys} | {"eval_episodes": float(len(done))}
 
@@ -231,9 +243,10 @@ def train(cfg: dict[str, Any], run_dir: str | Path | None = None, resume: str | 
                 mf.flush()
                 if log:
                     pr = " ".join(f"{ABBR.get(k, k[:4])}={row[f'ep_part_{k}']:+.3f}" for k in runner.parts if f"ep_part_{k}" in row)
+                    ev = " ".join(f"{a}={row[f'ep_ev_{k}']:.1f}" for a, k in EV_SHOW if f"ep_ev_{k}" in row)
                     print(f"[{u}/{total}] steps={steps} r/step={row['step_reward_mean']:+.4f} "
                           f"ep_ret={row.get('ep_return', float('nan')):+.3f} ({pr}) ent={stats['ent']:.2f} kl={stats['kl']:.4f} "
-                          f"inv={info['invalid_rate']:.2f} noop={row['noop_frac']:.2f} "
+                          f"[{ev}] inv={info['invalid_rate']:.2f} noop={row['noop_frac']:.2f} "
                           f"roll={t_roll:.1f}s upd={row['t_update']:.1f}s", flush=True)
                 if u % cfg["checkpoint_every"] == 0 or u == total:
                     save_checkpoint(run / f"ckpt_{u:06d}.pt", policy, opt, u, cfg, m, rstd, steps)

@@ -85,6 +85,8 @@ Según `docs/specs/reward.md`, con estos valores concretos:
 ```
 r = territory + attack + economy + defense + terminal      (docs/specs/reward.md)
 ```
+`info.events = { attack_orders, attack_tribe_orders, expand_orders, boat_orders, build_orders, nuke_orders, tribes_conquered, nations_conquered }` (recuentos del paso; `docs/specs/protocol.md` §4).
+
 `info.rewardParts = { territory, attack, economy, defense, terminal }` para registrar cada componente; por el protocolo v2 llegan separados.
 
 ## 7. Requisitos de aceptación (tests)

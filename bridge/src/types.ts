@@ -26,6 +26,7 @@ export interface EnvConfig {
 }
 
 import type { ActionKind } from "./features";
+import type { Events } from "./events";
 import type { RewardParts } from "./reward";
 
 /** Acciones de la v0, con su forma original (las usan las políticas aleatoria y heurística). */
@@ -95,6 +96,8 @@ export interface Observation {
 export interface StepInfo {
   invalidAction: boolean;
   rewardParts: RewardParts;
+  /** Recuentos del paso (docs/specs/protocol.md §4). */
+  events: Events;
   won: boolean;
   eliminated: boolean;
   tick: number;

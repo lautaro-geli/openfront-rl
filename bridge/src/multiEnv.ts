@@ -23,6 +23,7 @@ import { GameRunner } from "@openfront/engine/GameRunner";
 import { loadMapFiles } from "@openfront/shared/GameMapLoader";
 import { actionToIntents, computeMaskInfo, type MaskInfo } from "./actions";
 import { emptyMask } from "./mask";
+import { countConquest, countIntentEvents, zeroEvents, type Events } from "./events";
 import { computeRewardParts, newRewardState, sumParts, type RewardState } from "./reward";
 import { FsMapLoader } from "./mapLoader";
 import {
@@ -82,6 +83,8 @@ interface Episode {
   initialPlayers: number;
   spawnEndTick: number | null;
   done: boolean;
+  /** Conquistas ocurridas durante el paso en curso: [conquistador, conquistado]. */
+  conquests: [Player, Player][];
 }
 
 /**
@@ -169,6 +172,7 @@ export class MultiAgentEnv {
       initialPlayers: cfg.agents,
       spawnEndTick: null,
       done: false,
+      conquests: [],
     } as unknown as Episode;
     ep.runner = new GameRunner(game, new Executor(game, start.gameID, clientIdFor(0)), (gu) => {
       if ("errMsg" in gu) {
@@ -180,6 +184,12 @@ export class MultiAgentEnv {
       if ((gu.updates[GameUpdateType.Win] ?? []).length > 0) ep.sawWin = true;
     });
     ep.runner.init();
+    // El motor avisa de cada conquista a través de `conquerPlayer`; se envuelve la instancia (no el código del motor).
+    const conquerPlayer = game.conquerPlayer.bind(game);
+    game.conquerPlayer = (conqueror: Player, conquered: Player) => {
+      ep.conquests.push([conqueror, conquered]);
+      conquerPlayer(conqueror, conquered);
+    };
     ep.agents = start.players.map((p) => {
       const me = game.playerByClientID(p.clientID);
       if (me === null) throw new Error(`el jugador ${p.clientID} no existe en la partida`);
@@ -200,6 +210,8 @@ export class MultiAgentEnv {
     // Todas las acciones se calculan sobre el mismo estado y viajan en el primer tick del paso.
     const intents: StampedIntent[] = [];
     const invalid: boolean[] = [];
+    const events: Events[] = agents.map(() => zeroEvents());
+    ep.conquests = [];
     agents.forEach((a, i) => {
       if (a.eliminated) {
         invalid.push(false);
@@ -214,6 +226,7 @@ export class MultiAgentEnv {
       const info = a.maskInfo ?? computeMaskInfo(game, a.me, cfg.maxNeighbors, cfg.grid.h * cfg.grid.w);
       const built = actionToIntents(action, game, a.me, a.clientID, info, cfg.grid, cfg.maxNeighbors);
       intents.push(...built.intents);
+      if (!built.invalid) countIntentEvents(game, built.intents, events[i]);
       invalid.push(built.invalid);
     });
 
@@ -242,6 +255,7 @@ export class MultiAgentEnv {
       const wasEliminated = a.eliminated;
       const eliminatedNow = afterSpawn && !a.me.isAlive();
       const won = ep.sawWin && winner === a.me;
+      for (const [by, who] of ep.conquests) if (by === a.me) countConquest(events[i], who);
       const parts = computeRewardParts(game, a.me, a.rs, cfg, { afterSpawn, wasEliminated, eliminatedNow, won, landTiles });
       a.eliminated = a.eliminated || eliminatedNow;
       reward.push(sumParts(parts));
@@ -249,6 +263,7 @@ export class MultiAgentEnv {
       info.push({
         invalidAction: invalid[i],
         rewardParts: parts,
+        events: events[i],
         won,
         eliminated: a.eliminated,
         tick: game.ticks(),

@@ -123,7 +123,7 @@ def test_entrenamiento_corto_guarda_config_y_checkpoint(tmp_path):
     run = train(cfg, tmp_path / "run", log=False)
     assert (run / "config.yaml").exists() and (run / "metrics.jsonl").exists() and (run / "latest.pt").exists()
     ck = torch.load(run / "latest.pt", weights_only=False)
-    assert ck["config"]["seed"] == 3 and ck["protocol_version"] == 2 and ck["update"] == 2
+    assert ck["config"]["seed"] == 3 and ck["protocol_version"] == 3 and ck["update"] == 2
     lines = (run / "metrics.jsonl").read_text().strip().splitlines()
     assert len(lines) == 2
     import json

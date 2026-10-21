@@ -1,0 +1,73 @@
+import { PlayerType, UnitType } from "@openfront/engine-api/game/GameTypes";
+import { describe, expect, it } from "vitest";
+import { countIntentEvents, EVENT_NAMES, zeroEvents } from "../src/events";
+import { HeuristicPolicy } from "../src/heuristicPolicy";
+import { MultiAgentEnv } from "../src/multiEnv";
+
+describe("eventos del paso", () => {
+  it("cuenta misiles, construcciones, ataques y expansiones a partir de las intenciones", async () => {
+    const env = await MultiAgentEnv.create({ bots: 10, maxTicks: 600 });
+    const pol = new HeuristicPolicy("ev-1", env.cfg.grid);
+    let obs = await env.reset("ev-1");
+    for (let i = 0; i < 5; i++) obs = env.step(obs.map((o) => pol.act(o))).obs; // las tribus aparecen al terminar el spawn
+    const g = env.unsafeGame();
+    const tribe = g.allPlayers().find((p) => p.type() === PlayerType.Bot);
+    expect(tribe).toBeDefined();
+    const ev = zeroEvents();
+    const c = "rl-agent-0";
+    countIntentEvents(
+      g,
+      [
+        { type: "build_unit", unit: UnitType.AtomBomb, tile: 0, clientID: c },
+        { type: "build_unit", unit: UnitType.MIRV, tile: 0, clientID: c },
+        { type: "build_unit", unit: UnitType.City, tile: 0, clientID: c },
+        { type: "attack", targetID: null, troops: 10, clientID: c },
+        { type: "attack", targetID: tribe!.id(), troops: 10, clientID: c },
+        { type: "boat", troops: 10, dst: 0, clientID: c },
+      ] as never,
+      ev,
+    );
+    expect(ev).toMatchObject({ nuke_orders: 2, build_orders: 1, expand_orders: 1, attack_orders: 1, attack_tribe_orders: 1, boat_orders: 1 });
+  }, 60000);
+
+  it("la heurística ordena ataques y los eventos son enteros coherentes", async () => {
+    const env = await MultiAgentEnv.create({ bots: 20, maxTicks: 3000 });
+    const pol = new HeuristicPolicy("ev-2", env.cfg.grid);
+    let obs = await env.reset("ev-2");
+    const tot = zeroEvents();
+    for (let i = 0; i < 250; i++) {
+      const r = env.step(obs.map((o) => pol.act(o)));
+      obs = r.obs;
+      for (const k of EVENT_NAMES) {
+        const v = r.info[0].events[k];
+        expect(Number.isInteger(v) && v >= 0).toBe(true);
+        tot[k] += v;
+      }
+      if (r.done) break;
+    }
+    expect(tot.attack_orders + tot.expand_orders).toBeGreaterThan(0);
+    expect(tot.attack_tribe_orders).toBeLessThanOrEqual(tot.attack_orders);
+  }, 240000);
+
+  it("cuenta las tribus conquistadas por el agente cuando ataca a sus vecinos", async () => {
+    const env = await MultiAgentEnv.create({ bots: 20, nations: "disabled", difficulty: "Easy", maxTicks: 18000 });
+    const heu = new HeuristicPolicy("k-b", env.cfg.grid);
+    let obs = await env.reset("k-b");
+    const tot = zeroEvents();
+    for (let i = 0; i < 1800; i++) {
+      const o = obs[0];
+      const base = heu.act(o);
+      const slot = o.mask.attackSlots.findIndex((x) => x);
+      // La heurística nunca ataca a tribus: aquí se cambia cada expansión por un ataque si hay un vecino atacable.
+      const act = base.kind === "expand" && slot >= 0 ? ({ kind: "attack", slot, fraction: 0.75 } as const) : base;
+      const r = env.step([act]);
+      obs = r.obs;
+      for (const k of EVENT_NAMES) tot[k] += r.info[0].events[k];
+      if (r.done) break;
+    }
+    const dead = env.unsafeGame().allPlayers().filter((p) => p.type() === PlayerType.Bot && !p.isAlive()).length;
+    expect(tot.tribes_conquered).toBeGreaterThan(0);
+    expect(tot.tribes_conquered).toBeLessThanOrEqual(dead);
+    expect(tot.attack_tribe_orders).toBeGreaterThan(0);
+  }, 400000);
+});

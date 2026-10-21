@@ -29,6 +29,7 @@ def test_manifest_y_formas():
         assert r.mask["spawn"].all()  # empieza en fase de spawn
         assert r.obs["grid"].dtype == np.float32 and r.mask["kind"].dtype == bool
         assert not r.done and r.reward.shape == (2,)
+        assert r.events.shape == (2, len(m.event_names)) and "tribes_conquered" in m.event_names and (r.events == 0).all()
 
 
 def test_determinismo_y_hash():

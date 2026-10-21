@@ -36,6 +36,7 @@ class Result:
     tick: int
     reward: np.ndarray  # [A] float32
     reward_parts: np.ndarray  # [A, P] float32; columnas en m.reward_parts
+    events: np.ndarray  # [A, E] float32; recuentos del paso, columnas en m.event_names
     terminated: np.ndarray  # [A] bool
     invalid: np.ndarray  # [A] bool
     won: np.ndarray  # [A] bool
@@ -55,13 +56,14 @@ def decode_result(m: Manifest, body: bytes) -> Result:
     reward = np.ndarray((a,), np.float32, body, base, (stride,)).copy()
     flags = np.ndarray((a, 4), np.uint8, body, base + 4, (stride, 1))
     parts = np.ndarray((a, len(m.reward_parts)), np.float32, body, base + 8, (stride, 4)).copy()
+    events = np.ndarray((a, len(m.event_names)), np.float32, body, base + 8 + 4 * len(m.reward_parts), (stride, 4)).copy()
     h = m.agent_header_bytes
     floats = np.ndarray((a, m.obs_floats), np.float32, body, base + h, (stride, 4))
     masks = np.ndarray((a, m.mask_bytes), np.uint8, body, base + h + 4 * m.obs_floats, (stride, 1))
     obs = {n: floats[:, b.offset : b.offset + b.size].reshape((a, *b.shape)) for n, b in m.obs.items()}
     mask = {n: masks[:, b.offset : b.offset + b.size].reshape((a, *b.shape)).astype(bool) for n, b in m.mask.items()}
     return Result(
-        done=done, truncated=truncated, tick=tick, reward=reward, reward_parts=parts,
+        done=done, truncated=truncated, tick=tick, reward=reward, reward_parts=parts, events=events,
         terminated=flags[:, 0].astype(bool), invalid=flags[:, 1].astype(bool),
         won=flags[:, 2].astype(bool), eliminated=flags[:, 3].astype(bool), obs=obs, mask=mask,
     )
