@@ -1,0 +1,195 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Panel openfront-rl</title>
+<style>
+:root{--bg:#f6f7f9;--card:#fff;--ink:#1c2430;--mut:#667085;--line:#e3e7ee;--acc:#2f6fed;--ok:#1a9d5b;--warn:#c47f00;--bad:#d1384f;--c1:#2f6fed;--c2:#e8590c;--c3:#1a9d5b;--c4:#9c36b5;--c5:#c47f00;--c6:#0c8599}
+@media(prefers-color-scheme:dark){:root:not([data-theme=light]){--bg:#12161c;--card:#1b212a;--ink:#e6eaf0;--mut:#8d98a8;--line:#2b3340;--acc:#6b9bff;--ok:#3fcf8e;--warn:#e5a93a;--bad:#ff6b81;--c1:#6b9bff;--c2:#ff8c42;--c3:#3fcf8e;--c4:#c77dff;--c5:#e5a93a;--c6:#3bc9db}}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:14px/1.45 system-ui,Segoe UI,sans-serif}
+header{display:flex;flex-wrap:wrap;gap:8px 20px;align-items:center;padding:12px 16px;background:var(--card);border-bottom:1px solid var(--line);position:sticky;top:0;z-index:2}
+h1{font-size:16px;margin:0}nav{display:flex;gap:4px;flex-wrap:wrap}
+nav button{border:0;background:none;color:var(--mut);padding:6px 12px;border-radius:6px;cursor:pointer;font:inherit}
+nav button.on{background:var(--acc);color:#fff}
+main{padding:16px;max-width:1200px;margin:0 auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px;margin-bottom:14px}
+.card h2{font-size:14px;margin:0 0 10px}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{color:var(--mut);font-weight:500;font-size:12px}.scroll{overflow-x:auto}
+button.b{border:1px solid var(--line);background:var(--card);color:var(--ink);padding:4px 10px;border-radius:6px;cursor:pointer;font:inherit}
+button.b:hover{border-color:var(--acc)}button.b.red{color:var(--bad)}button.pri{background:var(--acc);color:#fff;border:0;padding:7px 14px;border-radius:6px;cursor:pointer;font:inherit}
+button:disabled{opacity:.4;cursor:default}
+.pill{display:inline-block;padding:1px 8px;border-radius:99px;font-size:12px;border:1px solid var(--line)}
+.running{color:var(--ok);border-color:var(--ok)}.paused{color:var(--warn);border-color:var(--warn)}.caído,.killed{color:var(--bad);border-color:var(--bad)}
+form{display:flex;flex-wrap:wrap;gap:10px;align-items:end}label{display:flex;flex-direction:column;font-size:12px;color:var(--mut);gap:3px}
+input,select{background:var(--bg);color:var(--ink);border:1px solid var(--line);border-radius:6px;padding:6px 8px;font:inherit;min-width:90px}
+.grid{display:grid;gap:12px;grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+.stat .v{font-size:20px;font-weight:600}.stat .k{font-size:12px;color:var(--mut)}
+.bar{height:8px;background:var(--line);border-radius:4px;overflow:hidden}.bar>i{display:block;height:100%;background:var(--acc)}
+.charts{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(380px,1fr))}
+canvas{width:100%;height:210px;display:block}
+.legend{display:flex;flex-wrap:wrap;gap:4px 12px;font-size:12px;color:var(--mut);margin-top:6px}.legend i{display:inline-block;width:10px;height:10px;border-radius:2px;margin-right:4px}
+pre{margin:0;max-height:260px;overflow:auto;font:12px/1.4 ui-monospace,Consolas,monospace;white-space:pre-wrap;color:var(--mut)}
+.arch{display:flex;flex-direction:column;gap:10px;align-items:stretch}.row{display:flex;gap:10px;flex-wrap:wrap}.row>.box{flex:1 1 180px}
+.box{border:1px solid var(--line);border-radius:8px;padding:10px;background:var(--bg)}.box b{display:block}.box small{color:var(--mut)}
+.arrow{text-align:center;color:var(--mut)}
+.goal{display:grid;grid-template-columns:24px 1fr 120px;gap:8px;align-items:center;padding:8px 0;border-bottom:1px solid var(--line)}
+.goal .t small{color:var(--mut);display:block}.muted{color:var(--mut)}
+.err{color:var(--bad);margin:6px 0}
+</style>
+</head>
+<body>
+<header>
+  <h1>openfront-rl · panel</h1>
+  <nav id="nav"></nav>
+  <span class="muted" id="sel"></span>
+</header>
+<main id="main"></main>
+<script>
+"use strict";
+const TABS = [["procesos","Procesos"],["run","Run en vivo"],["arq","Arquitectura"],["metas","Metas"]];
+let tab = "procesos", run = null, timer = null, metrics = [], lastUpdate = 0;
+const $ = (s, el = document) => el.querySelector(s);
+function h(tag, attrs, ...kids) {
+  const e = document.createElement(tag);
+  for (const [k, v] of Object.entries(attrs || {})) {
+    if (k === "class") e.className = v; else if (k.startsWith("on")) e.addEventListener(k.slice(2), v); else if (v !== false && v != null) e.setAttribute(k, v === true ? "" : v);
+  }
+  for (const c of kids.flat()) e.append(c instanceof Node ? c : document.createTextNode(c ?? ""));
+  return e;
+}
+async function api(path, body) {
+  const r = await fetch("/api" + path, body === undefined ? {} : {method: "POST", headers: {"Content-Type": "application/json"}, body: JSON.stringify(body)});
+  const j = await r.json();
+  if (!r.ok) throw new Error(j.error || r.statusText);
+  return j;
+}
+const fmt = (x, d = 2) => x == null || Number.isNaN(x) ? "–" : (Math.abs(x) >= 1000 ? Math.round(x).toLocaleString("es") : (+x).toFixed(d));
+const pill = s => h("span", {class: "pill " + s}, s);
+
+function nav() {
+  const n = $("#nav"); n.replaceChildren(...TABS.map(([k, t]) => h("button", {class: k === tab ? "on" : "", onclick: () => { tab = k; metrics = []; lastUpdate = 0; nav(); render(); }}, t)));
+  $("#sel").textContent = run ? "run: " + run : "";
+}
+
+/* ---------- gráficos ---------- */
+const COLORS = ["--c1","--c2","--c3","--c4","--c5","--c6"];
+function css(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
+function smooth(pts, w = 5) { return pts.map((p, i) => { const s = pts.slice(Math.max(0, i - w + 1), i + 1); return {x: p.x, y: s.reduce((a, q) => a + q.y, 0) / s.length}; }); }
+function chart(title, series, opts = {}) {
+  const cv = h("canvas"), box = h("div", {class: "card"}, h("h2", {}, title), cv);
+  const leg = h("div", {class: "legend"}); box.append(leg);
+  requestAnimationFrame(() => draw(cv, leg, series, opts));
+  return box;
+}
+function draw(cv, leg, series, opts) {
+  const dpr = devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight; cv.width = W * dpr; cv.height = H * dpr;
+  const g = cv.getContext("2d"); g.scale(dpr, dpr); g.clearRect(0, 0, W, H);
+  const all = series.map(s => ({...s, pts: (opts.raw ? s.pts : smooth(s.pts))})).filter(s => s.pts.length);
+  leg.replaceChildren(...series.map((s, i) => h("span", {}, h("i", {style: "background:" + css(COLORS[i % 6])}), s.name)));
+  if (!all.length) { g.fillStyle = css("--mut"); g.font = "13px system-ui"; g.fillText("sin datos todavía", 12, 24); return; }
+  let xs = all.flatMap(s => s.pts.map(p => p.x)), ys = all.flatMap(s => s.pts.map(p => p.y));
+  let x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys, opts.zero ? 0 : Infinity), y1 = Math.max(...ys);
+  if (x0 === x1) x1 = x0 + 1; if (y0 === y1) { y0 -= 1; y1 += 1; }
+  const L = 46, R = 8, T = 8, B = 20, px = x => L + (x - x0) / (x1 - x0) * (W - L - R), py = y => H - B - (y - y0) / (y1 - y0) * (H - T - B);
+  g.strokeStyle = css("--line"); g.fillStyle = css("--mut"); g.font = "11px system-ui"; g.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) { const y = y0 + (y1 - y0) * i / 4; g.beginPath(); g.moveTo(L, py(y)); g.lineTo(W - R, py(y)); g.stroke(); g.fillText(fmt(y, Math.abs(y) < 10 ? 2 : 0), 4, py(y) + 4); }
+  g.fillText(fmt(x0, 0), L, H - 5); g.fillText("actualización " + fmt(x1, 0), W - 120, H - 5);
+  all.forEach((s, i) => { g.strokeStyle = css(COLORS[series.findIndex(q => q.name === s.name) % 6]); g.lineWidth = 2; g.beginPath(); s.pts.forEach((p, j) => j ? g.lineTo(px(p.x), py(p.y)) : g.moveTo(px(p.x), py(p.y))); g.stroke(); if (s.pts.length < 40) { g.fillStyle = g.strokeStyle; s.pts.forEach(p => { g.beginPath(); g.arc(px(p.x), py(p.y), 2.5, 0, 7); g.fill(); }); } });
+}
+const col = (name, label) => ({name: label, pts: metrics.filter(r => typeof r[name] === "number").map(r => ({x: r.update, y: r[name]}))});
+
+/* ---------- pantallas ---------- */
+async function viewProcesos(m) {
+  const [runs, cfgs] = await Promise.all([api("/runs"), api("/configs")]);
+  const err = h("div", {class: "err"});
+  const f = h("form", {onsubmit: async ev => {
+    ev.preventDefault(); err.textContent = "";
+    const d = Object.fromEntries(new FormData(f));
+    const body = {config: d.config}; if (d.name) body.name = d.name;
+    for (const k of ["seed", "workers", "updates"]) if (d[k] !== "") body[k] = parseInt(d[k], 10);
+    if (d.resume) body.resume = true;
+    try { const r = await api("/runs", body); run = r.name; tab = "run"; metrics = []; lastUpdate = 0; nav(); render(); } catch (e) { err.textContent = e.message; }
+  }},
+    h("label", {}, "Configuración", h("select", {name: "config"}, cfgs.map(c => h("option", {value: c}, c)))),
+    h("label", {}, "Nombre (opcional)", h("input", {name: "name", placeholder: "auto"})),
+    h("label", {}, "Semilla", h("input", {name: "seed", type: "number", min: 0, placeholder: "config"})),
+    h("label", {}, "Workers", h("input", {name: "workers", type: "number", min: 1, placeholder: "2"})),
+    h("label", {}, "Actualizaciones", h("input", {name: "updates", type: "number", min: 1, placeholder: "config"})),
+    h("label", {}, "Reanudar", h("input", {name: "resume", type: "checkbox"})),
+    h("button", {class: "pri", type: "submit"}, "Lanzar"));
+  const act = (name, cmd, label, cls = "") => h("button", {class: "b " + cls, onclick: async () => { try { await (cmd === "kill" ? api(`/runs/${name}/kill`, {}) : api(`/runs/${name}/control`, {command: cmd})); } catch (e) { alert(e.message); } render(); }}, label);
+  const tbl = h("table", {}, h("thead", {}, h("tr", {}, ["Run", "Estado", "Actualización", "Pasos/s", "Retorno", "CPU %", "Mem MB", "Procesos", ""].map(t => h("th", {}, t)))),
+    h("tbody", {}, runs.map(r => h("tr", {}, h("td", {}, h("a", {href: "#", onclick: e => { e.preventDefault(); run = r.name; tab = "run"; metrics = []; lastUpdate = 0; nav(); render(); }}, r.name)), h("td", {}, pill(r.state)),
+      h("td", {}, r.total ? `${r.update}/${r.total}` : r.update), h("td", {}, fmt(r.steps_per_s, 0)), h("td", {}, fmt(r.ep_return, 3)), h("td", {}, fmt(r.cpu, 0)), h("td", {}, fmt(r.mem_mb, 0)), h("td", {}, r.procs ?? "–"),
+      h("td", {}, r.state === "running" ? [act(r.name, "pause", "Pausar"), " ", act(r.name, "stop", "Detener"), " ", act(r.name, "kill", "Matar", "red")] : r.state === "paused" ? [act(r.name, "run", "Reanudar"), " ", act(r.name, "stop", "Detener"), " ", act(r.name, "kill", "Matar", "red")] : r.state === "caído" ? "" : "")))));
+  m.replaceChildren(h("div", {class: "card"}, h("h2", {}, "Lanzar entrenamiento"), f, err),
+    h("div", {class: "card"}, h("h2", {}, "Procesos"), runs.length ? h("div", {class: "scroll"}, tbl) : h("span", {class: "muted"}, "Todavía no hay runs.")),
+    h("div", {class: "muted"}, "Pausar y Detener guardan un checkpoint y actúan al terminar la actualización en curso. Matar termina el proceso de inmediato."));
+}
+
+async function viewRun(m) {
+  if (!run) { const rs = await api("/runs"); if (rs.length) run = rs[0].name; else { m.replaceChildren(h("div", {class: "card muted"}, "Elegí o lanzá un run en Procesos.")); return; } nav(); }
+  const [st, rows, log] = await Promise.all([api(`/runs/${run}/status`), api(`/runs/${run}/metrics?since=${lastUpdate}`), api(`/runs/${run}/log?tail=60`)]);
+  metrics = metrics.concat(rows); if (metrics.length) lastUpdate = metrics[metrics.length - 1].update;
+  const s = st.status || {}, u = st.usage || {};
+  const prog = s.total ? Math.min(100, 100 * (s.update || 0) / s.total) : 0;
+  const stat = (k, v) => h("div", {class: "stat"}, h("div", {class: "v"}, v), h("div", {class: "k"}, k));
+  const workers = (s.workers || []).map(w => h("div", {class: "box"}, h("b", {}, "Worker " + (w.i + 1)), h("small", {}, `tick ${w.tick} · episodio ${w.ep_len} pasos`),
+    h("div", {}, `ataques ${fmt(w.events?.attack_orders, 0)} · a tribus ${fmt(w.events?.attack_tribe_orders, 0)} · tribus conquistadas ${fmt(w.events?.tribes_conquered, 0)} · misiles ${fmt(w.events?.nuke_orders, 0)}`)));
+  const sp = []; for (let i = 1; i < metrics.length; i++) { const a = metrics[i - 1], b = metrics[i]; if (b.time > a.time) sp.push({x: b.update, y: (b.steps - a.steps) / (b.time - a.time)}); }
+  const ents = ["ep_ev_attack_orders", "ep_ev_attack_tribe_orders", "ep_ev_tribes_conquered", "ep_ev_nuke_orders", "ep_ev_build_orders"];
+  const labels = ["ataques", "ataques a tribus", "tribus conquistadas", "misiles", "construcciones"];
+  m.replaceChildren(
+    h("div", {class: "card"}, h("div", {class: "row"}, h("div", {class: "box"}, h("b", {}, run), pill(st.state), " ", st.state === "running" ? h("button", {class: "b", onclick: () => api(`/runs/${run}/control`, {command: "pause"}).then(render)}, "Pausar") : st.state === "paused" ? h("button", {class: "b", onclick: () => api(`/runs/${run}/control`, {command: "run"}).then(render)}, "Reanudar") : ""),
+      h("div", {class: "box grid"}, stat("Actualización", s.total ? `${s.update}/${s.total}` : fmt(s.update, 0)), stat("Pasos totales", fmt(s.steps, 0)), stat("Pasos/s", fmt(s.steps_per_s, 0)), stat("CPU %", fmt(u.cpu, 0)), stat("Memoria MB", fmt(u.mem_mb, 0)))),
+      h("div", {class: "bar", style: "margin-top:10px"}, h("i", {style: `width:${prog}%`}))),
+    h("div", {class: "card"}, h("h2", {}, "Workers (partida en curso de cada uno)"), workers.length ? h("div", {class: "row"}, workers) : h("span", {class: "muted"}, "sin datos todavía")),
+    h("div", {class: "charts"},
+      chart("Retorno por episodio (suma de componentes)", [col("ep_return", "retorno")]),
+      chart("Retorno por componente", ["territory", "attack", "economy", "defense", "terminal"].map((k, i) => col("ep_part_" + k, ["territorio", "ataque", "economía", "defensa", "fin"][i]))),
+      chart("Conducta por episodio", ents.map((k, i) => col(k, labels[i])), {zero: true}),
+      chart("Entropía y KL", [col("ent", "entropía"), col("kl", "KL")]),
+      chart("Ventaja: explicada por el crítico", [col("expl_var", "varianza explicada")]),
+      chart("Velocidad (pasos/s)", [{name: "pasos/s", pts: sp}], {zero: true})),
+    h("div", {class: "card"}, h("h2", {}, "Salida del proceso"), h("pre", {}, log.log || "(vacío)")));
+}
+
+async function viewArq(m) {
+  if (!run) { m.replaceChildren(h("div", {class: "card muted"}, "Elegí un run en Procesos.")); return; }
+  const a = await api(`/runs/${run}/architecture`);
+  if (!a.groups) { m.replaceChildren(h("div", {class: "card muted"}, "Este run todavía no escribió architecture.json.")); return; }
+  const G = Object.fromEntries(a.groups.map(g => [g.key, g])), pct = g => g ? (100 * g.params / a.total).toFixed(1) + " %" : "";
+  const box = (key, desc) => G[key] ? h("div", {class: "box"}, h("b", {}, G[key].label), h("small", {}, desc), h("div", {}, fmt(G[key].params, 0) + " parámetros · " + pct(G[key])), h("div", {class: "bar"}, h("i", {style: `width:${100 * G[key].params / a.total}%`}))) : "";
+  const mods = a.modules.map(x => h("tr", {}, h("td", {}, x.name), h("td", {}, x.type), h("td", {}, x.shape || ""), h("td", {}, fmt(x.params, 0))));
+  m.replaceChildren(h("div", {class: "card"}, h("h2", {}, `Arquitectura del agente · ${fmt(a.total, 0)} parámetros`), h("div", {class: "arch"},
+    h("div", {class: "box"}, h("b", {}, "Observación"), h("small", {}, "mapa 20×32×64 · economía · militar · comparación de jugadores")),
+    h("div", {class: "arrow"}, "↓"),
+    h("div", {class: "row"}, box("map", "conv ×4 → 256"), box("econ", "MLP por fila + pooling → 128"), box("mil", "unidades y ataques → 128"), box("cmp", "16 jugadores → 128")),
+    h("div", {class: "arrow"}, "↓ concatenar"), box("core", "MLP 512 con LayerNorm"), h("div", {class: "arrow"}, "↓"),
+    h("div", {class: "row"}, box("heads", "tipo de acción → jugador / unidad / celda / fracción / tipo (autorregresivo)"), box("value", "valor del estado")),
+    h("div", {class: "arrow"}, "↓"), h("div", {class: "box"}, h("b", {}, "Acción"), h("small", {}, "[tipo, fila, celda, fracción, tipo de construcción, extra] con máscara de acciones válidas")))),
+    h("div", {class: "card"}, h("h2", {}, "Módulos"), h("div", {class: "scroll"}, h("table", {}, h("thead", {}, h("tr", {}, ["Nombre", "Tipo", "Forma", "Parámetros"].map(t => h("th", {}, t)))), h("tbody", {}, mods)))));
+}
+
+async function viewMetas(m) {
+  if (!run) { m.replaceChildren(h("div", {class: "card muted"}, "Elegí un run en Procesos.")); return; }
+  const gs = await api(`/runs/${run}/goals`), done = gs.filter(g => g.done).length;
+  const prog = g => g.done ? 100 : g.best == null ? 0 : (g.op === ">=" || g.op === ">") && g.value > 0 ? Math.max(0, Math.min(100, 100 * g.best / g.value)) : 0;
+  m.replaceChildren(h("div", {class: "card"}, h("h2", {}, `Metas del agente · ${done} de ${gs.length}`),
+    gs.map(g => h("div", {class: "goal"}, h("span", {style: "font-size:18px;color:" + (g.done ? css("--ok") : css("--mut"))}, g.done ? "✔" : "○"),
+      h("div", {class: "t"}, g.title, h("small", {}, `${g.metric} ${g.op} ${g.value} · mejor: ${fmt(g.best, 3)}`)), h("div", {class: "bar"}, h("i", {style: `width:${prog(g)}%;background:${g.done ? css("--ok") : css("--acc")}`}))))));
+}
+
+async function render() {
+  const m = $("#main");
+  try { await ({procesos: viewProcesos, run: viewRun, arq: viewArq, metas: viewMetas}[tab])(m); }
+  catch (e) { m.replaceChildren(h("div", {class: "card err"}, "Error: " + e.message)); }
+}
+nav(); render();
+const dirty = () => tab === "procesos" && [...document.querySelectorAll("form input, form select")].some(e => e.type === "checkbox" ? e.checked : e.tagName === "INPUT" && e.value !== "");
+setInterval(() => { if (!document.hidden && !dirty() && !["INPUT", "SELECT"].includes(document.activeElement?.tagName)) render(); }, 4000);
+</script>
+</body>
+</html>

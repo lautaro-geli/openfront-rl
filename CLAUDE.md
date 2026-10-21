@@ -28,6 +28,7 @@ Entrenar una política (PyTorch, PPO + self-play) que juegue partidas completas 
 - Política aleatoria o heurística: `cd bridge && npm run random -- --policy heuristic --bots 20 --seed s --episodes 4`
 - Tests trainer: `cd trainer && pytest` (tests contra el motor real, incluida la red y PPO; necesita Node 24, o `OPENFRONT_NODE`)
 - Medir velocidad: `cd trainer && PYTHONPATH=. python scripts/bench.py --workers 1 5 --map World --bots 400`
+- Panel de control: `cd trainer && python -m openfront_rl.dashboard` → http://127.0.0.1:8765 (lanza, pausa, reanuda, detiene y mata entrenamientos; métricas, workers, arquitectura y metas; ADR 0008, `docs/specs/dashboard.md`)
 - Entrenar: `cd trainer && python -m openfront_rl.train --config configs/ppo_base.yaml` (crea `runs/<nombre>-<semilla>/` con config, `metrics.jsonl` y checkpoints; `--resume runs/.../latest.pt`)
 
 ## Convenciones
@@ -39,7 +40,7 @@ Entrenar una política (PyTorch, PPO + self-play) que juegue partidas completas 
 ## Mapa de documentación
 - `docs/architecture.md`: visión general, diagramas y fases.
 - `docs/adr/`: decisiones de arquitectura.
-- `docs/specs/`: observaciones, acciones, recompensa.
+- `docs/specs/`: observaciones, acciones, recompensa, protocolo, panel (`dashboard.md`).
 - `docs/phase0-investigation.md`: prompt de la primera sesión (investigación del motor).
 
 ## Entorno
@@ -47,7 +48,7 @@ Entrenar una política (PyTorch, PPO + self-play) que juegue partidas completas 
 - Instalar el motor con `npm ci --ignore-scripts` dentro de `vendor/openfront` (no `npm install`). `node_modules` queda ignorado por git.
 
 ## Estado actual
-**Fases 0, 1 y 2 hechas; Fase 3 escrita y en pruebas** (falta entrenar en el PC del usuario). `bridge/`: observación v2, 24 acciones con máscara, recompensa v2 por categorías con presupuesto (terminal > territorio > ataque > economía > defensa; `docs/specs/reward.md`), registro de eventos (ataques, tribus conquistadas, misiles) y protocolo v3. `trainer/openfront_rl/`: cliente, entorno en paralelo, red por ramas con cabezas autorregresivas (`model.py`), PPO (`ppo.py`) y `train.py` (ADR 0007, aceptada). Siguiente: entrenar contra tribus `Easy` en Britannia, comparar con la heurística y pasar a World. ADRs 0003–0005 siguen en "propuesta".
+**Fases 0, 1 y 2 hechas; Fase 3 escrita y en pruebas** (falta entrenar en el PC del usuario). `bridge/`: observación v2, 24 acciones con máscara, recompensa v2 por categorías con presupuesto (terminal > territorio > ataque > economía > defensa; `docs/specs/reward.md`), registro de eventos (ataques, tribus conquistadas, misiles) y protocolo v3. `trainer/openfront_rl/`: cliente, entorno en paralelo, red por ramas con cabezas autorregresivas (`model.py`), PPO (`ppo.py`) `train.py` (ADR 0007, aceptada) y el panel web local `dashboard.py` (ADR 0008). Siguiente: entrenar contra tribus `Easy` en Britannia, comparar con la heurística y pasar a World. ADRs 0003–0005 siguen en "propuesta".
 
 ## Trampa conocida
 `bridge/tsconfig.json` DEBE incluir `../vendor/openfront/packages/*/src/**/*`; si no, `tsx` transpila mal las clases del motor y falla en la primera partida (ver `bridge/README.md`).

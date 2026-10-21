@@ -21,6 +21,7 @@ import yaml
 
 from .manifest import Manifest
 from .model import MASK_KEYS, OBS_KEYS, ModelConfig, Policy, to_tensors
+from . import runctl
 from .ppo import PPOConfig, RolloutBuffer, RunningStd, ppo_update
 from .vec_env import VecGame, default_workers
 
@@ -206,10 +207,13 @@ def train(cfg: dict[str, Any], run_dir: str | Path | None = None, resume: str | 
         T = int(cfg["rollout_steps"])
         buf = RolloutBuffer(T, workers, {k: b.shape for k, b in m.obs.items()}, {k: b.shape for k, b in m.mask.items()}, m.action_dims)
         n_params = sum(p.numel() for p in policy.parameters())
+        runctl.write_json(run / "architecture.json", runctl.architecture(policy))
+        runctl.write_json(run / "control.json", {"command": "run"})
         if log:
             print(f"run={run} workers={workers} params={n_params:,} T={T} protocolo=v{m.raw['version']}", flush=True)
         total = int(cfg["updates"])
         t0 = time.time()
+        runctl.write_status(run, "running", update=update0, total=total, steps=steps, time=0.0, steps_per_s=0.0, workers=[])
         with open(run / "metrics.jsonl", "a", encoding="utf8") as mf:
             for u in range(update0 + 1, total + 1):
                 frac = 1 - (u - 1) / max(1, total)
@@ -248,9 +252,33 @@ def train(cfg: dict[str, Any], run_dir: str | Path | None = None, resume: str | 
                           f"ep_ret={row.get('ep_return', float('nan')):+.3f} ({pr}) ent={stats['ent']:.2f} kl={stats['kl']:.4f} "
                           f"[{ev}] inv={info['invalid_rate']:.2f} noop={row['noop_frac']:.2f} "
                           f"roll={t_roll:.1f}s upd={row['t_update']:.1f}s", flush=True)
+                saved = False
                 if u % cfg["checkpoint_every"] == 0 or u == total:
                     save_checkpoint(run / f"ckpt_{u:06d}.pt", policy, opt, u, cfg, m, rstd, steps)
                     save_checkpoint(run / "latest.pt", policy, opt, u, cfg, m, rstd, steps)
+                    saved = True
+                sps = T * workers / max(1e-6, t_roll + row["t_update"])
+
+                def status(state: str) -> None:
+                    runctl.write_status(
+                        run, state, update=u, total=total, steps=steps, time=round(time.time() - t0, 1), steps_per_s=round(sps, 1),
+                        workers=[{"i": i, "tick": int(runner.results[i].tick), "ep_len": int(runner.ep_len[i]),
+                                  "events": dict(zip(m.event_names, runner.ep_events[i].tolist()))} for i in range(workers)])
+
+                # Control cooperativo del panel (docs/specs/dashboard.md): se atiende entre actualizaciones.
+                cmd = runctl.read_command(run)
+                if cmd in ("pause", "stop") and not saved:
+                    save_checkpoint(run / "latest.pt", policy, opt, u, cfg, m, rstd, steps)
+                while cmd == "pause":
+                    status("paused")
+                    time.sleep(1.0)
+                    cmd = runctl.read_command(run)
+                    if cmd == "stop":
+                        save_checkpoint(run / "latest.pt", policy, opt, u, cfg, m, rstd, steps)
+                if cmd == "stop":
+                    status("stopped")
+                    break
+                status("finished" if u == total else "running")
     finally:
         vec.close()
     return run

@@ -1,0 +1,13 @@
+# Metas del agente (docs/specs/dashboard.md §3). `metric` es una columna de metrics.jsonl; el avance es el máximo del run.
+goals:
+  - {id: survive_episode, title: "Sobrevivir un episodio completo", metric: ep_eliminated, op: "<", value: 0.5}
+  - {id: first_tribe_attack, title: "Primer ataque a una tribu", metric: ep_ev_attack_tribe_orders, op: ">", value: 0}
+  - {id: five_attacks, title: "5 ataques por episodio", metric: ep_ev_attack_orders, op: ">=", value: 5}
+  - {id: first_tribe, title: "Conquistar una tribu", metric: ep_ev_tribes_conquered, op: ">", value: 0}
+  - {id: five_tribes, title: "Conquistar 5 tribus en un episodio", metric: ep_ev_tribes_conquered, op: ">=", value: 5}
+  - {id: ten_tribes, title: "Conquistar 10 tribus en un episodio", metric: ep_ev_tribes_conquered, op: ">=", value: 10}
+  - {id: first_build, title: "Primera construcción", metric: ep_ev_build_orders, op: ">", value: 0}
+  - {id: first_nuke, title: "Primer misil lanzado", metric: ep_ev_nuke_orders, op: ">", value: 0}
+  - {id: territory_10, title: "10 % del mapa (territorio)", metric: ep_part_territory, op: ">=", value: 0.05}
+  - {id: territory_half, title: "Mitad del camino al 80 % (territorio)", metric: ep_part_territory, op: ">=", value: 0.2}
+  - {id: win, title: "Ganar una partida", metric: ep_won, op: ">", value: 0}
