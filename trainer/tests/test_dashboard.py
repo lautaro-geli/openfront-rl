@@ -197,3 +197,12 @@ def test_estadisticas_de_worker_cuentan_construcciones():
     s = ws.summary(0)
     assert s["built"]["city"] == 3 and s["built"]["port"] == 1 and s["nukes_launched"] == 1
     assert "2 ciudades" in game_line(g) and "1 puertos" in game_line(g) or "1 puerto" in game_line(g)
+
+
+def test_bonus_de_conquista_decae_hasta_cero():
+    from openfront_rl.train import conquest_weight
+    cfg = {"env": {"bots": 20}, "conquest": {"budget": 0.2, "until": 0.5}}
+    assert conquest_weight(cfg, 0.0) == pytest.approx(0.01)
+    assert conquest_weight(cfg, 0.25) == pytest.approx(0.005)
+    assert conquest_weight(cfg, 0.5) == 0.0 and conquest_weight(cfg, 1.0) == 0.0
+    assert conquest_weight({"env": {"bots": 20}, "conquest": {"budget": 0}}, 0.0) == 0.0

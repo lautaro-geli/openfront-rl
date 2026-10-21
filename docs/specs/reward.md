@@ -71,3 +71,15 @@ Cada componente viaja por separado y se registra por episodio (suma) y por paso 
 - Cada potencial está en [0, 1]; `Φ_seguridad = 1` sin vecinos hostiles.
 - El valor acumulado de cada categoría nunca supera su presupuesto, y la suma de los presupuestos activos es menor que 1.
 - La suma de los componentes que llegan por el protocolo es igual a la recompensa total.
+
+## 9. Bonus por tribus conquistadas (currículo, lo aplica el trainer)
+Al empezar, la mayor ganancia está en conquistar tribus (no tienen economía ni defienden). Para empujar al agente a atacarlas hay un bonus que **decae con el progreso del entrenamiento** hasta desaparecer:
+
+```
+bonus por tribu = B_c · max(0, 1 − p / p_fin) / N_tribus       (p = progreso del run en [0, 1])
+```
+
+- `B_c` = `conquest.budget` (0.20 por defecto): lo máximo que paga el bonus en una partida si se conquistan todas las tribus. `p_fin` = `conquest.until` (0.5): a partir de ese progreso el bonus es 0. `N_tribus` = `env.bots`.
+- Se paga por cada tribu eliminada porque el agente tomó su último territorio (evento `tribes_conquered`, `docs/specs/protocol.md` §4). No se paga por ataques ni por tribus que mató otro jugador.
+- Lo calcula `trainer/openfront_rl/train.py` (el puente no conoce el progreso del entrenamiento), se suma a la recompensa del paso y se registra como componente aparte `conquest` (`ep_part_conquest`). La evaluación no lo incluye.
+- Presupuestos: 0.67 + 0.20 < 1, así que ganar sigue pesando más que todo lo que se cobra por el camino. Con `conquest.budget: 0` está apagado.

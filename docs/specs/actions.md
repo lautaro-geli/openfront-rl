@@ -66,6 +66,9 @@ Acompaña a cada observación. Se calcula del mismo estado y se cachea hasta el 
 
 Los campos antiguos `spawn`, `expand` y `attackSlots` se conservan.
 
+### 4b. Acciones desactivadas por configuración
+`EnvConfig.disabledActions` (lista de nombres de tipo, p. ej. `["embargo_start", "emoji"]`; por defecto vacía) apaga esos tipos en `mask.kind`; una acción desactivada cuenta como inválida. Sirve para quitar durante el entrenamiento lo que no aporta contra tribus: embargos (las tribus no comercian), emoji, donaciones, alianzas y marcar objetivo. `configs/ppo_base.yaml` las desactiva.
+
 ## 5. Tests (todos contra el motor real)
 - Ninguna acción enmascarada produce un intent; una acción cuya resolución falla produce `invalidAction` y no llega al motor.
 - Cada tipo de acción, forzando un estado donde es válida, cambia el estado esperado del motor (se construye una ciudad, aparece una petición de alianza, etc.).

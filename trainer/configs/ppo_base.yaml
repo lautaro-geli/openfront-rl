@@ -23,6 +23,11 @@ env:
   rewardAttackWeight: 0.12
   rewardEconomyWeight: 0.10
   rewardDefenseWeight: 0.05
+  # Sin diplomacia ni comercio: contra tribus no aportan (docs/specs/actions.md §4b).
+  disabledActions: [alliance_request, alliance_reject, alliance_break, alliance_extend, embargo_start, embargo_stop,
+                    embargo_all_start, embargo_all_stop, target_player, emoji, donate_gold, donate_troops]
+# Bonus por tribu conquistada: máximo al empezar y 0 a partir del 50 % del run (docs/specs/reward.md §9).
+conquest: {budget: 0.20, until: 0.5}
 model: {}
 ppo:
   gamma: 0.997

@@ -196,7 +196,7 @@ async function viewRun(m) {
     h("div", {class: "card"}, h("h2", {}, "Workers (tocá uno para ver el detalle y su registro; pausar se aplica al empezar la próxima actualización)"), workers.length ? h("div", {class: "row"}, workers) : h("span", {class: "muted"}, "sin datos todavía")),
     h("div", {class: "charts"},
       chart("Retorno por episodio (suma de componentes)", [col("ep_return", "retorno")]),
-      chart("Retorno por componente", ["territory", "attack", "economy", "defense", "terminal"].map((k, i) => col("ep_part_" + k, ["territorio", "ataque", "economía", "defensa", "fin"][i]))),
+      chart("Retorno por componente", ["territory", "attack", "economy", "defense", "conquest", "terminal"].map((k, i) => col("ep_part_" + k, ["territorio", "ataque", "economía", "defensa", "tribus (bonus)", "fin"][i]))),
       chart("Conducta por episodio", ents.map((k, i) => col(k, labels[i])), {zero: true}),
       chart("Entropía y KL", [col("ent", "entropía"), col("kl", "KL")]),
       chart("Ventaja: explicada por el crítico", [col("expl_var", "varianza explicada")]),

@@ -1,7 +1,7 @@
 import { Difficulty, PlayerType, UnitType } from "@openfront/engine-api/game/GameTypes";
 import { describe, expect, it } from "vitest";
 import { countConqueredBy, countConquest, countIntentEvents, EVENT_NAMES, zeroEvents } from "../src/events";
-import { CELL_KINDS } from "../src/features";
+import { CELL_KINDS, KIND } from "../src/features";
 import { HeuristicPolicy } from "../src/heuristicPolicy";
 import { MultiAgentEnv } from "../src/multiEnv";
 
@@ -114,5 +114,32 @@ describe("eventos del paso", () => {
     countConquest(ev, tribe);
     countConquest(ev, nation);
     expect(ev).toMatchObject({ conquered_by_tribe: 1, conquered_by_nation: 2, tribes_conquered: 1, nations_conquered: 1 });
+  }, 60000);
+
+  it("cuenta una sola vez a cada jugador conquistado aunque el motor llame varias veces a conquerPlayer", async () => {
+    const env = await MultiAgentEnv.create({ bots: 5, nations: "disabled", difficulty: Difficulty.Easy, maxTicks: 600 });
+    const pol = new HeuristicPolicy("ev-4", env.cfg.grid);
+    let obs = await env.reset("ev-4");
+    for (let i = 0; i < 5; i++) obs = env.step(obs.map((o) => pol.act(o))).obs;
+    const g = env.unsafeGame();
+    const me = g.allPlayers().find((p) => p.clientID() === "rl-agent-0")!;
+    const tribe = g.allPlayers().find((p) => p.type() === PlayerType.Bot)!;
+    g.conquerPlayer(me, tribe);
+    g.conquerPlayer(me, tribe);
+    g.conquerPlayer(me, tribe);
+    const r = env.step([{ kind: "noop" }]);
+    expect(r.info[0].events.tribes_conquered).toBe(1);
+  }, 60000);
+
+  it("disabledActions apaga tipos en la máscara y sus órdenes cuentan como inválidas", async () => {
+    const env = await MultiAgentEnv.create({ bots: 5, nations: "disabled", maxTicks: 600, disabledActions: ["emoji", "embargo_start", "donate_gold"] });
+    const pol = new HeuristicPolicy("ev-5", env.cfg.grid);
+    let obs = await env.reset("ev-5");
+    for (let i = 0; i < 30; i++) obs = env.step(obs.map((o) => pol.act(o))).obs;
+    for (const k of ["emoji", "embargo_start", "donate_gold"] as const) expect(obs[0].mask.kind[KIND[k]]).toBe(0);
+    expect(obs[0].mask.kind[KIND.expand]).toBe(1);
+    const r = env.step([{ kind: "emoji", row: 0, cell: 0, fraction: 0.5, type: 0, aux: 0 } as never]);
+    expect(r.info[0].invalidAction).toBe(true);
+    await expect(MultiAgentEnv.create({ disabledActions: ["nada"] })).rejects.toThrow(/desconocidas/);
   }, 60000);
 });

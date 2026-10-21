@@ -106,3 +106,6 @@ Comunicación con Python, varias partidas en paralelo, construcción de edificio
 - Valores correctos de los pesos de la recompensa (ver `reward.md`; `ppo_base.yaml` trae un punto de partida).
 - ~~Si la malla de muestreo 4 × 4 pierde territorios pequeños en World~~ Medido en ADR 0005: no ve territorios de 1 tile; con 32 × 64 ve el 67–84 % de las celdas ocupadas.
 - Si `maxTicks = 6000` (10 min de juego) alcanza para que la política aleatoria llegue a ver victorias o eliminaciones.
+
+## Configuración: `disabledActions`
+Lista de tipos de acción (`ACTION_KINDS`) que el entorno trata como no disponibles: se ponen a 0 en `mask.kind` tras calcular la observación (`MultiAgentEnv.observeAll`) y, como la traducción de acciones valida contra esa máscara, una orden de ese tipo cuenta como inválida. Nombres desconocidos hacen fallar `create`. Ver `docs/specs/actions.md` §4b.

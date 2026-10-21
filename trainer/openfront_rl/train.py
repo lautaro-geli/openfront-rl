@@ -40,6 +40,7 @@ DEFAULTS: dict[str, Any] = {
     "checkpoint_every": 25,
     "eval": {"every": 50, "episodes": 5},
     "env": {},
+    "conquest": {"budget": 0.20, "until": 0.5},  # bonus por tribu conquistada que decae a 0 (docs/specs/reward.md §9)
     "model": {},
     "ppo": {},
 }
@@ -62,6 +63,13 @@ def _merge(a: dict[str, Any], b: dict[str, Any]) -> None:
             a[k] = v
 
 
+def conquest_weight(cfg: dict[str, Any], progress: float) -> float:
+    """Recompensa por tribu conquistada: lineal de `budget / N_tribus` a 0 en `until` (docs/specs/reward.md §9)."""
+    cq = cfg.get("conquest") or {}
+    decay = max(0.0, 1 - progress / max(1e-9, float(cq.get("until", 0.5))))
+    return float(cq.get("budget", 0)) * decay / max(1, int(cfg["env"].get("bots", 1)))
+
+
 def stack_obs(results: list[Any]) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
     """Un agente por partida: [N, ...]."""
     obs = {k: np.stack([r.obs[k][0] for r in results]) for k in OBS_KEYS}
@@ -69,7 +77,7 @@ def stack_obs(results: list[Any]) -> tuple[dict[str, np.ndarray], dict[str, np.n
     return obs, mask
 
 
-ABBR = {"territory": "terr", "attack": "atq", "economy": "eco", "defense": "def", "terminal": "fin"}
+ABBR = {"conquest": "conq", "territory": "terr", "attack": "atq", "economy": "eco", "defense": "def", "terminal": "fin"}
 
 
 # (etiqueta de consola, evento): lo que se muestra por episodio; el resto queda en metrics.jsonl como ep_ev_*.
@@ -91,6 +99,9 @@ class Runner:
         n = vec.n
         self.ep_parts = np.zeros((n, len(self.parts)))
         self.ep_events = np.zeros((n, len(self.m.event_names)))
+        self.conquest_w = 0.0  # recompensa por tribu conquistada en este momento del entrenamiento
+        self.ep_conquest = np.zeros(n)
+        self.tribes_idx = self.m.event_names.index("tribes_conquered")
         self.ep_len = np.zeros(n, int)
         self.ep_invalid = np.zeros(n, int)
         self.kind_counts = np.zeros(len(self.m.space["kinds"]))
@@ -122,7 +133,9 @@ class Runner:
                     continue
                 fin = self.vec.final[i]
                 r = fin if fin is not None else results[i]
-                buf.reward[t, i] = r.reward[0]
+                bonus = self.conquest_w * float(r.events[0][self.tribes_idx])
+                buf.reward[t, i] = r.reward[0] + bonus
+                self.ep_conquest[i] += bonus
                 self.ep_parts[i] += r.reward_parts[0]
                 self.ep_events[i] += r.events[0]
                 self.ep_len[i] += 1
@@ -135,7 +148,7 @@ class Runner:
                     if fin.truncated and not fin.terminated[0]:
                         o, m = {k: v[0:1] for k, v in fin.obs.items()}, {k: v[0:1] for k, v in fin.mask.items()}
                         buf.boot[t, i] = self.policy.values(to_tensors(o, m, self.device)[0]).item()
-                    p = dict(zip(self.parts, self.ep_parts[i].tolist()))
+                    p = {**dict(zip(self.parts, self.ep_parts[i].tolist())), "conquest": float(self.ep_conquest[i])}
                     episodes.append({
                         "return": float(sum(p.values())), "length": int(self.ep_len[i]), "won": bool(fin.won[0]),
                         "eliminated": bool(fin.eliminated[0]), "truncated": bool(fin.truncated),
@@ -150,6 +163,7 @@ class Runner:
                         self.wlogs.write(i, game_line(g))
                     self.ep_max[i] = float(results[i].obs["globals"][0][self.land_idx])
                     self.ep_parts[i] = 0
+                    self.ep_conquest[i] = 0
                     self.ep_events[i] = 0
                     self.ep_len[i] = 0
                     self.ep_invalid[i] = 0
@@ -329,6 +343,7 @@ def train(cfg: dict[str, Any], run_dir: str | Path | None = None, resume: str | 
                 for g in opt.param_groups:
                     g["lr"] = pcfg.lr * max(0.1, frac)
                 ent_coef = pcfg.ent_coef_final + (pcfg.ent_coef - pcfg.ent_coef_final) * frac
+                runner.conquest_w = conquest_weight(cfg, progress)
                 tr = time.time()
                 episodes, info = runner.collect(buf, active=active)
                 t_roll = time.time() - tr
@@ -362,7 +377,7 @@ def train(cfg: dict[str, Any], run_dir: str | Path | None = None, resume: str | 
                 mf.write(json.dumps(row) + "\n")
                 mf.flush()
                 if log:
-                    pr = " ".join(f"{ABBR.get(k, k[:4])}={row[f'ep_part_{k}']:+.3f}" for k in runner.parts if f"ep_part_{k}" in row)
+                    pr = " ".join(f"{ABBR.get(k, k[:4])}={row[f'ep_part_{k}']:+.3f}" for k in [*runner.parts, "conquest"] if f"ep_part_{k}" in row)
                     evs = " ".join(f"{a}={row[f'ep_ev_{k}']:.1f}" for a, k in EV_SHOW if f"ep_ev_{k}" in row)
                     prog = f"{st['eps']}/{goal} partidas" if goal else f"{u}/{total}"
                     print(f"[{u}|{prog}] steps={steps} r/step={row['step_reward_mean']:+.4f} "

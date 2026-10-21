@@ -24,6 +24,7 @@ import { GameRunner } from "@openfront/engine/GameRunner";
 import { loadMapFiles } from "@openfront/shared/GameMapLoader";
 import { actionToIntents, computeMaskInfo, type MaskInfo } from "./actions";
 import { emptyMask } from "./mask";
+import { ACTION_KINDS, KIND, type ActionKind } from "./features";
 import { countBuilt, countConqueredBy, countConquest, countIntentEvents, zeroEvents, type Events } from "./events";
 import { computeRewardParts, newRewardState, sumParts, type RewardState } from "./reward";
 import { FsMapLoader } from "./mapLoader";
@@ -46,6 +47,7 @@ export const DEFAULT_CONFIG: EnvConfig = {
   bots: 20,
   nations: "default",
   difficulty: Difficulty.Medium,
+  disabledActions: [],
   decisionInterval: 10,
   maxTicks: 6000,
   grid: { h: 32, w: 64 },
@@ -86,6 +88,8 @@ interface Episode {
   done: boolean;
   /** Conquistas ocurridas durante el paso en curso: [conquistador, conquistado]. */
   conquests: [Player, Player][];
+  /** Jugadores ya contados como conquistados: el motor llama a `conquerPlayer` varias veces por el mismo jugador. */
+  conquered: Set<Player>;
   /** Unidades colocadas por cada agente durante el paso en curso (índice de agente → tipos). */
   built: UnitType[][];
 }
@@ -106,6 +110,8 @@ export class MultiAgentEnv {
 
   static async create(cfg: Partial<EnvConfig> = {}, mapsDir: string = DEFAULT_MAPS_DIR): Promise<MultiAgentEnv> {
     const full: EnvConfig = { ...DEFAULT_CONFIG, ...cfg, grid: { ...DEFAULT_CONFIG.grid, ...cfg.grid } };
+    const unknown = full.disabledActions.filter((k) => !(ACTION_KINDS as readonly string[]).includes(k));
+    if (unknown.length > 0) throw new Error(`disabledActions desconocidas: ${unknown.join(", ")}`);
     if (full.decisionInterval < 1) throw new Error("decisionInterval debe ser >= 1");
     if (full.maxTicks < 1) throw new Error("maxTicks debe ser >= 1");
     if (!Number.isInteger(full.samples) || full.samples < 1) throw new Error("samples debe ser un entero >= 1");
@@ -176,6 +182,7 @@ export class MultiAgentEnv {
       spawnEndTick: null,
       done: false,
       conquests: [],
+      conquered: new Set(),
       built: [],
     } as unknown as Episode;
     ep.runner = new GameRunner(game, new Executor(game, start.gameID, clientIdFor(0)), (gu) => {
@@ -191,7 +198,10 @@ export class MultiAgentEnv {
     // El motor avisa de cada conquista a través de `conquerPlayer`; se envuelve la instancia (no el código del motor).
     const conquerPlayer = game.conquerPlayer.bind(game);
     game.conquerPlayer = (conqueror: Player, conquered: Player) => {
-      ep.conquests.push([conqueror, conquered]);
+      if (!ep.conquered.has(conquered)) {
+        ep.conquered.add(conquered);
+        ep.conquests.push([conqueror, conquered]);
+      }
       conquerPlayer(conqueror, conquered);
     };
     ep.agents = start.players.map((p) => {
@@ -223,7 +233,6 @@ export class MultiAgentEnv {
     const intents: StampedIntent[] = [];
     const invalid: boolean[] = [];
     const events: Events[] = agents.map(() => zeroEvents());
-    ep.conquests = [];
     ep.built.forEach((b) => (b.length = 0));
     agents.forEach((a, i) => {
       if (a.eliminated) {
@@ -287,6 +296,7 @@ export class MultiAgentEnv {
       });
     });
 
+    ep.conquests = []; // ya contadas en este paso
     const allEliminated = agents.every((a) => a.eliminated);
     const ticksSince = afterSpawn ? game.ticks() - (ep.spawnEndTick as number) : 0;
     const terminatedGame = ep.sawWin || allEliminated;
@@ -334,7 +344,9 @@ export class MultiAgentEnv {
             neighbors: [],
           }
         : computeMaskInfo(ep.game, a.me, this.cfg.maxNeighbors, this.cfg.grid.h * this.cfg.grid.w);
-      return buildObservation(ep.game, a.me, ctx, a.maskInfo);
+      const obs = buildObservation(ep.game, a.me, ctx, a.maskInfo);
+      for (const k of this.cfg.disabledActions) obs.mask.kind[KIND[k as ActionKind]] = 0;
+      return obs;
     });
   }
 
