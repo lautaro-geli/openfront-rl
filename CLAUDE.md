@@ -24,7 +24,7 @@ Entrenar una política (PyTorch, PPO + self-play) que juegue partidas completas 
 ## Comandos
 > Se completarán cuando existan (actualizar este bloque en cada fase).
 - Typecheck bridge: `cd bridge && npm run typecheck`
-- Tests bridge: `cd bridge && npm test` (39 tests, ~4 min)
+- Tests bridge: `cd bridge && npm test` (40 tests, ~4 min)
 - Política aleatoria o heurística: `cd bridge && npm run random -- --policy heuristic --bots 20 --seed s --episodes 4`
 - Tests trainer: `cd trainer && pytest` (tests contra el motor real, incluida la red y PPO; necesita Node 24, o `OPENFRONT_NODE`)
 - Medir velocidad: `cd trainer && PYTHONPATH=. python scripts/bench.py --workers 1 5 --map World --bots 400`

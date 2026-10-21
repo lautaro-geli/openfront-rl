@@ -87,6 +87,7 @@ class NodeGame:
         if not tsx.exists():
             raise ProtocolError(f"falta {tsx}: ejecuta `npm ci` dentro de bridge/")
         self._stderr: deque[str] = deque(maxlen=200)
+        self._stderr_new: deque[str] = deque(maxlen=2000)  # líneas aún sin registrar en el log del worker
         self._frames: queue.Queue[tuple[int, bytes] | None] = queue.Queue()
         self._proc = subprocess.Popen(
             # `node --import tsx` (sin el envoltorio `tsx`, que lanza otro proceso hijo y deja huérfanos al cerrar).
@@ -131,7 +132,9 @@ class NodeGame:
         err = self._proc.stderr
         assert err is not None
         for line in iter(err.readline, b""):
-            self._stderr.append(line.decode("utf8", "replace").rstrip())
+            text = line.decode("utf8", "replace").rstrip()
+            self._stderr.append(text)
+            self._stderr_new.append(text)
 
     def _send(self, kind: int, body: bytes = b"") -> None:
         assert self._proc.stdin is not None
@@ -159,6 +162,13 @@ class NodeGame:
             raise ProtocolError(body.decode("utf8", "replace"))
         if t != want:
             raise ProtocolError(f"respuesta inesperada 0x{t:02x}; se esperaba 0x{want:02x}")
+
+    def drain_stderr(self) -> list[str]:
+        """Líneas de error del proceso Node desde la última llamada."""
+        out: list[str] = []
+        while self._stderr_new:
+            out.append(self._stderr_new.popleft())
+        return out
 
     def stderr_tail(self) -> str:
         return "\n".join(list(self._stderr)[-20:])

@@ -50,6 +50,7 @@ pre{margin:0;max-height:260px;overflow:auto;font:12px/1.4 ui-monospace,Consolas,
 "use strict";
 const TABS = [["procesos","Procesos"],["run","Run en vivo"],["arq","Arquitectura"],["metas","Metas"]];
 let tab = "procesos", run = null, timer = null, metrics = [], lastUpdate = 0;
+const expanded = new Set();
 const $ = (s, el = document) => el.querySelector(s);
 function h(tag, attrs, ...kids) {
   const e = document.createElement(tag);
@@ -136,9 +137,31 @@ async function viewRun(m) {
   const s = st.status || {}, u = st.usage || {};
   const prog = s.episodes_total ? Math.min(100, 100 * (s.episodes_done || 0) / s.episodes_total) : s.total ? Math.min(100, 100 * (s.update || 0) / s.total) : 0;
   const stat = (k, v) => h("div", {class: "stat"}, h("div", {class: "v"}, v), h("div", {class: "k"}, k));
-  const wbtn = w => h("button", {class: "b", style: "margin-top:6px", onclick: async () => { try { await api(`/runs/${run}/workers`, {worker: w.i, paused: !w.paused}); } catch (e) { alert(e.message); } render(); }}, w.paused ? "Reanudar worker" : "Pausar worker");
-  const workers = (s.workers || []).map(w => h("div", {class: "box", style: w.paused ? "opacity:.6" : ""}, h("b", {}, "Worker " + (w.i + 1) + (w.paused ? " · en pausa" : "")), h("small", {}, `tick ${w.tick} · episodio ${w.ep_len} pasos`),
-    h("div", {}, `ataques ${fmt(w.events?.attack_orders, 0)} · a tribus ${fmt(w.events?.attack_tribe_orders, 0)} · tribus conquistadas ${fmt(w.events?.tribes_conquered, 0)} · misiles ${fmt(w.events?.nuke_orders, 0)}`), ["running", "paused"].includes(st.state) ? wbtn(w) : ""));
+  const wbtn = w => h("button", {class: "b", style: "margin-top:6px", onclick: async ev => { ev.stopPropagation(); try { await api(`/runs/${run}/workers`, {worker: w.i, paused: !w.paused}); } catch (e) { alert(e.message); } render(); }}, w.paused ? "Reanudar worker" : "Pausar worker");
+  const pc = x => x == null ? "–" : (100 * x).toFixed(1) + " %";
+  const wlogs = {};
+  await Promise.all([...expanded].map(async i => { try { wlogs[i] = (await api(`/runs/${run}/workers/${i}/log?tail=40`)).log; } catch (e) { wlogs[i] = ""; } }));
+  const workerCard = w => {
+    const t = w.stats || {}, open = expanded.has(w.i);
+    const recent = (t.recent || []).slice().reverse().map(g => h("tr", {}, h("td", {}, g.n), h("td", {}, g.result), h("td", {}, pc(g.max_territory)), h("td", {}, pc(g.final_territory)), h("td", {}, g.ticks), h("td", {}, g.tribes_conquered), h("td", {}, g.nations_conquered), h("td", {}, g.conquered_by || "–")));
+    return h("div", {class: "box", style: (w.paused ? "opacity:.7;" : "") + "cursor:pointer;flex:1 1 " + (open ? "100%" : "260px"), onclick: () => { open ? expanded.delete(w.i) : expanded.add(w.i); render(); }},
+      h("b", {}, (open ? "▾ " : "▸ ") + "Worker " + (w.i + 1) + (w.paused ? " · en pausa" : "")),
+      h("small", {}, `tick ${w.tick} · partida en curso: ${w.ep_len} pasos`),
+      h("div", {}, `Partidas jugadas: ${t.games ?? 0}`),
+      h("div", {}, `Territorio máx. medio: ${pc(t.avg_max_territory)} · final medio: ${pc(t.avg_final_territory)}`),
+      ["running", "paused"].includes(st.state) ? wbtn(w) : "",
+      open ? h("div", {onclick: ev => ev.stopPropagation(), style: "cursor:default;margin-top:10px"},
+        h("div", {class: "grid"},
+          stat("Lo conquistaron", fmt((t.conquered_by_tribe || 0) + (t.conquered_by_nation || 0), 0)),
+          stat("  · una tribu", fmt(t.conquered_by_tribe, 0)), stat("  · una nación", fmt(t.conquered_by_nation, 0)),
+          stat("Conquistó", fmt((t.tribes_conquered || 0) + (t.nations_conquered || 0), 0)),
+          stat("  · tribus", fmt(t.tribes_conquered, 0)), stat("  · naciones", fmt(t.nations_conquered, 0)),
+          stat("Victorias", fmt(t.wins, 0)), stat("Eliminado", fmt(t.eliminated, 0)), stat("Duración media (ticks)", fmt(t.avg_length, 0))),
+        h("h2", {style: "margin-top:12px"}, "Últimas partidas"),
+        recent.length ? h("div", {class: "scroll"}, h("table", {}, h("thead", {}, h("tr", {}, ["N.º", "Resultado", "Terr. máx.", "Terr. final", "Ticks", "Tribus", "Naciones", "Lo conquistó"].map(x => h("th", {}, x)))), h("tbody", {}, recent))) : h("span", {class: "muted"}, "todavía no terminó ninguna partida"),
+        h("h2", {style: "margin-top:12px"}, "Registro de este worker"), h("pre", {}, wlogs[w.i] || "(vacío)")) : "");
+  };
+  const workers = (s.workers || []).map(workerCard);
   const sp = []; for (let i = 1; i < metrics.length; i++) { const a = metrics[i - 1], b = metrics[i]; if (b.time > a.time) sp.push({x: b.update, y: (b.steps - a.steps) / (b.time - a.time)}); }
   const ents = ["ep_ev_attack_orders", "ep_ev_attack_tribe_orders", "ep_ev_tribes_conquered", "ep_ev_nuke_orders", "ep_ev_build_orders"];
   const labels = ["ataques", "ataques a tribus", "tribus conquistadas", "misiles", "construcciones"];
@@ -146,7 +169,7 @@ async function viewRun(m) {
     h("div", {class: "card"}, h("div", {class: "row"}, h("div", {class: "box"}, h("b", {}, run), pill(st.state), " ", st.state === "running" ? h("button", {class: "b", onclick: () => api(`/runs/${run}/control`, {command: "pause"}).then(render)}, "Pausar") : st.state === "paused" ? h("button", {class: "b", onclick: () => api(`/runs/${run}/control`, {command: "run"}).then(render)}, "Reanudar") : ""),
       h("div", {class: "box grid"}, stat("Partidas", s.episodes_total ? `${s.episodes_done ?? 0}/${s.episodes_total}` : "–"), stat("Actualización", s.total ? `${s.update}/${s.total}` : fmt(s.update, 0)), stat("Pasos totales", fmt(s.steps, 0)), stat("Pasos/s", fmt(s.steps_per_s, 0)), stat("CPU de la PC %", fmt(u.cpu, 0)), stat("Memoria MB", fmt(u.mem_mb, 0)))),
       h("div", {class: "bar", style: "margin-top:10px"}, h("i", {style: `width:${prog}%`}))),
-    h("div", {class: "card"}, h("h2", {}, "Workers (partida en curso de cada uno; se aplica al empezar la próxima actualización)"), workers.length ? h("div", {class: "row"}, workers) : h("span", {class: "muted"}, "sin datos todavía")),
+    h("div", {class: "card"}, h("h2", {}, "Workers (tocá uno para ver el detalle y su registro; pausar se aplica al empezar la próxima actualización)"), workers.length ? h("div", {class: "row"}, workers) : h("span", {class: "muted"}, "sin datos todavía")),
     h("div", {class: "charts"},
       chart("Retorno por episodio (suma de componentes)", [col("ep_return", "retorno")]),
       chart("Retorno por componente", ["territory", "attack", "economy", "defense", "terminal"].map((k, i) => col("ep_part_" + k, ["territorio", "ataque", "economía", "defensa", "fin"][i]))),

@@ -158,6 +158,13 @@ class Panel:
         except OSError:
             return ""
 
+    def worker_log(self, name: str, worker: int, tail: int = 200) -> str:
+        try:
+            lines = (self.run_dir(name) / "workers" / f"worker-{worker}.log").read_text(encoding="utf8", errors="ignore").splitlines()
+        except OSError:
+            return ""
+        return "\n".join(lines[-tail:])
+
     def configs(self) -> list[str]:
         return sorted(p.name for p in self.configs_dir.glob("*.yaml") if p.name != "goals.yaml")
 
@@ -299,6 +306,8 @@ def make_handler(panel: Panel):
                         return self._json({"log": panel.log(name, int(q.get("tail", 200)))})
                     if method == "POST" and what == "control":
                         return self._json(panel.control(name, str(body.get("command"))))
+                    if method == "GET" and what == "workers" and len(a) == 5 and a[4] == "log":
+                        return self._json({"log": panel.worker_log(name, int(a[3]), int(q.get("tail", 200)))})
                     if method == "POST" and what == "workers":
                         return self._json(panel.set_worker_paused(name, body.get("worker"), body.get("paused")))
                     if method == "POST" and what == "kill":

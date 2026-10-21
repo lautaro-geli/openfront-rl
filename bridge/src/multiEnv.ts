@@ -23,7 +23,7 @@ import { GameRunner } from "@openfront/engine/GameRunner";
 import { loadMapFiles } from "@openfront/shared/GameMapLoader";
 import { actionToIntents, computeMaskInfo, type MaskInfo } from "./actions";
 import { emptyMask } from "./mask";
-import { countConquest, countIntentEvents, zeroEvents, type Events } from "./events";
+import { countConqueredBy, countConquest, countIntentEvents, zeroEvents, type Events } from "./events";
 import { computeRewardParts, newRewardState, sumParts, type RewardState } from "./reward";
 import { FsMapLoader } from "./mapLoader";
 import {
@@ -255,7 +255,10 @@ export class MultiAgentEnv {
       const wasEliminated = a.eliminated;
       const eliminatedNow = afterSpawn && !a.me.isAlive();
       const won = ep.sawWin && winner === a.me;
-      for (const [by, who] of ep.conquests) if (by === a.me) countConquest(events[i], who);
+      for (const [by, who] of ep.conquests) {
+        if (by === a.me) countConquest(events[i], who);
+        else if (who === a.me) countConqueredBy(events[i], by);
+      }
       const parts = computeRewardParts(game, a.me, a.rs, cfg, { afterSpawn, wasEliminated, eliminatedNow, won, landTiles });
       a.eliminated = a.eliminated || eliminatedNow;
       reward.push(sumParts(parts));

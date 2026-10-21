@@ -13,6 +13,8 @@ export const EVENT_NAMES = [
   "nuke_orders",
   "tribes_conquered",
   "nations_conquered",
+  "conquered_by_tribe",
+  "conquered_by_nation",
 ] as const;
 export type Events = Record<(typeof EVENT_NAMES)[number], number>;
 
@@ -25,6 +27,8 @@ export const zeroEvents = (): Events => ({
   nuke_orders: 0,
   tribes_conquered: 0,
   nations_conquered: 0,
+  conquered_by_tribe: 0,
+  conquered_by_nation: 0,
 });
 
 const NUKE_UNITS = new Set<unknown>(Object.values(NUKE_UNIT));
@@ -57,4 +61,10 @@ export function countIntentEvents(game: Game, intents: StampedIntent[], ev: Even
 export function countConquest(ev: Events, conquered: Player): void {
   if (conquered.type() === PlayerType.Bot) ev.tribes_conquered++;
   else if (conquered.type() === PlayerType.Nation) ev.nations_conquered++;
+}
+
+/** El agente fue eliminado por `conqueror`: se anota si fue una tribu o una nación. */
+export function countConqueredBy(ev: Events, conqueror: Player): void {
+  if (conqueror.type() === PlayerType.Bot) ev.conquered_by_tribe++;
+  else if (conqueror.type() === PlayerType.Nation) ev.conquered_by_nation++;
 }

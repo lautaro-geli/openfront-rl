@@ -106,6 +106,7 @@ export function buildManifest(cfg: EnvConfig): object {
   const l = layout(cfg);
   return {
     version: PROTOCOL_VERSION,
+    globalFeatures: GLOBAL_FEATURES,
     agents: cfg.agents,
     grid: cfg.grid,
     decisionInterval: cfg.decisionInterval,

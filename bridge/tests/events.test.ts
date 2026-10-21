@@ -1,6 +1,6 @@
-import { PlayerType, UnitType } from "@openfront/engine-api/game/GameTypes";
+import { Difficulty, PlayerType, UnitType } from "@openfront/engine-api/game/GameTypes";
 import { describe, expect, it } from "vitest";
-import { countIntentEvents, EVENT_NAMES, zeroEvents } from "../src/events";
+import { countConqueredBy, countConquest, countIntentEvents, EVENT_NAMES, zeroEvents } from "../src/events";
 import { HeuristicPolicy } from "../src/heuristicPolicy";
 import { MultiAgentEnv } from "../src/multiEnv";
 
@@ -50,7 +50,7 @@ describe("eventos del paso", () => {
   }, 240000);
 
   it("cuenta las tribus conquistadas por el agente cuando ataca a sus vecinos", async () => {
-    const env = await MultiAgentEnv.create({ bots: 20, nations: "disabled", difficulty: "Easy", maxTicks: 18000 });
+    const env = await MultiAgentEnv.create({ bots: 20, nations: "disabled", difficulty: Difficulty.Easy, maxTicks: 18000 });
     const heu = new HeuristicPolicy("k-b", env.cfg.grid);
     let obs = await env.reset("k-b");
     const tot = zeroEvents();
@@ -70,4 +70,21 @@ describe("eventos del paso", () => {
     expect(tot.tribes_conquered).toBeLessThanOrEqual(dead);
     expect(tot.attack_tribe_orders).toBeGreaterThan(0);
   }, 400000);
+
+  it("distingue tribus y naciones al contar conquistas hechas y recibidas", async () => {
+    const env = await MultiAgentEnv.create({ bots: 5, nations: 3, difficulty: Difficulty.Easy, maxTicks: 600 });
+    const pol = new HeuristicPolicy("ev-3", env.cfg.grid);
+    let obs = await env.reset("ev-3");
+    for (let i = 0; i < 5; i++) obs = env.step(obs.map((o) => pol.act(o))).obs;
+    const all = env.unsafeGame().allPlayers();
+    const tribe = all.find((p) => p.type() === PlayerType.Bot)!;
+    const nation = all.find((p) => p.type() === PlayerType.Nation)!;
+    const ev = zeroEvents();
+    countConqueredBy(ev, tribe);
+    countConqueredBy(ev, nation);
+    countConqueredBy(ev, nation);
+    countConquest(ev, tribe);
+    countConquest(ev, nation);
+    expect(ev).toMatchObject({ conquered_by_tribe: 1, conquered_by_nation: 2, tribes_conquered: 1, nations_conquered: 1 });
+  }, 60000);
 });

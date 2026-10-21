@@ -159,3 +159,7 @@ def test_entrenamiento_por_partidas_termina_y_lo_guarda(tmp_path):
     st = json.loads((run / "status.json").read_text())
     assert st["state"] == "finished" and st["episodes_total"] == 3 and st["episodes_done"] == rows[-1]["episodes_done"]
     assert torch.load(run / "latest.pt", weights_only=False)["episodes_done"] == rows[-1]["episodes_done"]
+    ws = json.loads((run / "workers.json").read_text())
+    assert sum(w["games"] for w in ws) == rows[-1]["episodes_done"]  # cada partida terminada se anota en su worker
+    assert all(0 <= w["sum_max"] / max(1, w["games"]) <= 1 for w in ws)
+    assert any("partida 1:" in x.read_text() for x in (run / "workers").glob("worker-*.log"))

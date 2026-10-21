@@ -144,3 +144,22 @@ def test_pausar_y_reanudar_un_worker(panel):
     wait(lambda: st()["status"]["update"] >= u1 + 2 and not st()["status"]["workers"][1]["paused"], "worker 1 reanudado")
     assert call(panel, "/api/runs/w1/metrics?since=0")[1][-1]["active_workers"] == 2
     call(panel, "/api/runs/w1/kill", {})
+
+
+def test_estadisticas_y_registro_por_worker(panel):
+    assert call(panel, "/api/runs", {"config": "duo.yaml", "name": "e1", "episodes": 500})[0] == 201
+
+    def st():
+        return call(panel, "/api/runs/e1/status")[1]["status"] or {}
+
+    wait(lambda: any(w.get("stats", {}).get("games", 0) >= 1 for w in st().get("workers", [])), "una partida terminada", 200)
+    w = next(w for w in st()["workers"] if w["stats"]["games"] >= 1)["stats"]
+    assert 0 <= w["avg_max_territory"] <= 1 and 0 <= w["avg_final_territory"] <= 1 and w["avg_max_territory"] >= w["avg_final_territory"]
+    assert w["recent"][-1]["result"] in ("victoria", "eliminado", "tiempo") and w["recent"][-1]["n"] == w["games"]
+    assert {"conquered_by_tribe", "conquered_by_nation", "tribes_conquered", "nations_conquered"} <= set(w)
+    i = next(x["i"] for x in st()["workers"] if x["stats"]["games"] >= 1)
+    log = call(panel, f"/api/runs/e1/workers/{i}/log")[1]["log"]
+    assert "partida 1:" in log and "territorio máx" in log
+    assert call(panel, "/api/runs/e1/workers/x/log")[0] == 400
+    assert (panel.runs_dir / "e1" / "workers.json").exists()
+    call(panel, "/api/runs/e1/kill", {})

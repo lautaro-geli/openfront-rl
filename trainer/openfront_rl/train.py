@@ -25,6 +25,7 @@ from .model import MASK_KEYS, OBS_KEYS, ModelConfig, Policy, to_tensors
 from . import runctl
 from .ppo import PPOConfig, RolloutBuffer, RunningStd, ppo_update
 from .vec_env import VecGame, default_workers
+from .workers import WorkerLogs, WorkerStats, game_line
 
 DEFAULTS: dict[str, Any] = {
     "name": "ppo",
@@ -78,8 +79,10 @@ EV_SHOW = [("atq", "attack_orders"), ("a_trib", "attack_tribe_orders"), ("tribus
 class Runner:
     """Juega N partidas a la vez con la política y llena el buffer."""
 
-    def __init__(self, vec: VecGame, policy: Policy, device: torch.device):
+    def __init__(self, vec: VecGame, policy: Policy, device: torch.device, wstats: WorkerStats | None = None,
+                 wlogs: WorkerLogs | None = None):
         self.vec, self.policy, self.device = vec, policy, device
+        self.wstats, self.wlogs = wstats or WorkerStats(vec.n), wlogs
         self.m: Manifest = vec.manifest
         self.parts = list(self.m.reward_parts)
         self.results = vec.reset()
@@ -90,6 +93,8 @@ class Runner:
         self.ep_len = np.zeros(n, int)
         self.ep_invalid = np.zeros(n, int)
         self.kind_counts = np.zeros(len(self.m.space["kinds"]))
+        self.land_idx = self.m.global_features.index("land_share")
+        self.ep_max = np.array([float(r.obs["globals"][0][self.land_idx]) for r in self.results])  # mayor territorio de la partida en curso
 
     @torch.no_grad()
     def _act(self, obs: dict[str, np.ndarray], mask: dict[str, np.ndarray], greedy: bool = False):
@@ -120,6 +125,8 @@ class Runner:
                 self.ep_parts[i] += r.reward_parts[0]
                 self.ep_events[i] += r.events[0]
                 self.ep_len[i] += 1
+                share = float(r.obs["globals"][0][self.land_idx])
+                self.ep_max[i] = max(self.ep_max[i], share)
                 invalid += int(r.invalid[0])
                 self.ep_invalid[i] += int(r.invalid[0])
                 if fin is not None:
@@ -133,7 +140,14 @@ class Runner:
                         "eliminated": bool(fin.eliminated[0]), "truncated": bool(fin.truncated),
                         "invalid": int(self.ep_invalid[i]), **{f"part_{k}": v for k, v in p.items()},
                         **{f"ev_{k}": v for k, v in zip(self.m.event_names, self.ep_events[i].tolist())},
+                        "max_territory": float(self.ep_max[i]), "final_territory": share,
                     })
+                    g = self.wstats.end_game(i, won=bool(fin.won[0]), eliminated=bool(fin.eliminated[0]), max_territory=float(self.ep_max[i]),
+                                             final_territory=share, ticks=int(fin.tick),
+                                             events=dict(zip(self.m.event_names, self.ep_events[i].tolist())))
+                    if self.wlogs is not None:
+                        self.wlogs.write(i, game_line(g))
+                    self.ep_max[i] = float(results[i].obs["globals"][0][self.land_idx])
                     self.ep_parts[i] = 0
                     self.ep_events[i] = 0
                     self.ep_len[i] = 0
@@ -223,7 +237,10 @@ def train(cfg: dict[str, Any], run_dir: str | Path | None = None, resume: str | 
             opt.load_state_dict(ck["optimizer"])
             rstd.load(ck["reward_std"])
             update0, steps, eps0 = ck["update"], ck["steps"], ck.get("episodes_done", 0)
-        runner = Runner(vec, policy, device)
+        wstats, wlogs = WorkerStats(workers), WorkerLogs(run, workers)
+        if resume is not None:
+            wstats.load(run / "workers.json")
+        runner = Runner(vec, policy, device, wstats, wlogs)
         T = int(cfg["rollout_steps"])
         buf = RolloutBuffer(T, workers, {k: b.shape for k, b in m.obs.items()}, {k: b.shape for k, b in m.mask.items()}, m.action_dims)
         n_params = sum(p.numel() for p in policy.parameters())
@@ -240,7 +257,7 @@ def train(cfg: dict[str, Any], run_dir: str | Path | None = None, resume: str | 
             runctl.write_status(
                 run, state, update=st["u"], total=None if goal else total, episodes_done=st["eps"], episodes_total=goal, steps=steps,
                 time=round(time.time() - t0, 1), steps_per_s=round(st["sps"], 1),
-                workers=[{"i": i, "paused": i in st.get("paused", ()), "tick": int(runner.results[i].tick), "ep_len": int(runner.ep_len[i]),
+                workers=[{"i": i, "paused": i in st.get("paused", ()), "stats": wstats.summary(i), "tick": int(runner.results[i].tick), "ep_len": int(runner.ep_len[i]),
                           "events": dict(zip(m.event_names, runner.ep_events[i].tolist()))} for i in range(workers)])
 
         def save(name: str | None) -> None:
@@ -266,6 +283,10 @@ def train(cfg: dict[str, Any], run_dir: str | Path | None = None, resume: str | 
                 if cmd == "stop":
                     status("stopped")
                     break
+                for i in range(workers):  # pausas y reanudaciones al registro del worker
+                    if bool(active[i]) != st.get("was_active", [True] * workers)[i]:
+                        wlogs.write(i, "reanudado" if active[i] else "en pausa")
+                st["was_active"] = [bool(x) for x in active]
                 u = st["u"] + 1
                 progress = st["eps"] / goal if goal else (u - 1) / max(1, total)
                 frac = max(0.0, 1 - progress)
@@ -281,6 +302,10 @@ def train(cfg: dict[str, Any], run_dir: str | Path | None = None, resume: str | 
                 stats = ppo_update(policy, opt, buf, pcfg, ent_coef, rng, device)
                 steps += T * int(active.sum())
                 st["u"], st["eps"] = u, st["eps"] + len(episodes)
+                for i, g in enumerate(vec.games):
+                    for line in g.drain_stderr():
+                        wlogs.write(i, f"[motor] {line}")
+                wstats.save(run / "workers.json")
                 done = st["eps"] >= goal if goal else u >= total
                 row: dict[str, Any] = {
                     "update": u, "steps": steps, "episodes_done": st["eps"], "active_workers": int(active.sum()),

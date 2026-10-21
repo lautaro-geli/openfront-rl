@@ -39,6 +39,7 @@ class Manifest:
     agent_header_bytes: int
     reward_parts: tuple[str, ...]
     event_names: tuple[str, ...]
+    global_features: tuple[str, ...]
     action_dims: int
     obs: dict[str, Block]
     mask: dict[str, Block]
@@ -67,6 +68,7 @@ class Manifest:
             agent_header_bytes=raw["result"]["agentHeaderBytes"],
             reward_parts=tuple(raw["result"]["rewardParts"]),
             event_names=tuple(raw["result"]["eventNames"]),
+            global_features=tuple(raw["globalFeatures"]),
             action_dims=raw["actionDims"],
             obs=blocks(raw["obs"], KNOWN_OBS),
             mask=blocks(raw["mask"], KNOWN_MASK),

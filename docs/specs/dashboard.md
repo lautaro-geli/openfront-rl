@@ -4,17 +4,18 @@
 | Archivo | Lo escribe | Contenido |
 |---|---|---|
 | `config.yaml`, `metrics.jsonl`, `*.pt` | `train.py` | ya existentes |
-| `status.json` | `train.py`, tras cada actualización y mientras está en pausa | `{pid, state: "running"\|"paused"\|"stopping"\|"finished", update, total, episodes_done, episodes_total, steps, time, steps_per_s, updated_at, workers: [{i, paused, tick, ep_len, events: {nombre: n}}]}` |
+| `status.json` | `train.py`, tras cada actualización y mientras está en pausa | `{pid, state: "running"\|"paused"\|"stopping"\|"finished", update, total, episodes_done, episodes_total, steps, time, steps_per_s, updated_at, workers: [{i, paused, tick, ep_len, events: {nombre: n}, stats}]}`; `stats` ver §5b |
 | `architecture.json` | `train.py`, al arrancar | `{params, total, modules: [{name, params, shape?}], branches: [...]}` |
 | `control.json` | el panel | `{command: "run"\|"pause"\|"stop", paused_workers: [int]}`; ausente = `run` y ningún worker pausado |
 | `train.log` | el panel (salida del proceso) | texto |
+| `workers/worker-<i>.log` | `train.py` | registro de ese worker: una línea por partida terminada, pausas/reanudaciones y la salida de error de su proceso Node |
 
 `updated_at` es epoch en segundos. Un run está **vivo** si su `pid` existe y su proceso es de Python; si el estado dice `running` pero el proceso no existe, se muestra `caído`.
 
 ## 2. API (JSON, solo `127.0.0.1`)
 - `GET /api/runs` → lista de runs con estado, actualización, retorno medio reciente, CPU y memoria del árbol de procesos.
 - `GET /api/runs/<run>/metrics?since=N` → filas de `metrics.jsonl` desde la actualización `N`.
-- `GET /api/runs/<run>/status`, `/architecture`, `/goals`, `/log?tail=200`.
+- `GET /api/runs/<run>/status`, `/architecture`, `/goals`, `/log?tail=200`, `/workers/<i>/log?tail=200`.
 - `GET /api/configs` → archivos de `trainer/configs/*.yaml` (sin `goals.yaml`).
 - `POST /api/runs` `{config, name?, seed?, workers?, episodes?, updates?, resume?}` → lanza un entrenamiento. `config` debe ser un archivo de `configs/`; cualquier otro campo se rechaza (400).
 - `POST /api/runs/<run>/workers` `{worker: i, paused: bool}` → pausa o reanuda un worker.
@@ -37,6 +38,14 @@ goals:
 **Duración.** El run se mide en **partidas** (episodios terminados por los workers de entrenamiento; las de evaluación no cuentan): `episodes` en la configuración, `--episodes N` en la línea de comandos o el campo "Partidas" del panel. El run termina al cierre de la primera actualización en la que `episodes_done >= episodes`, así que puede pasarse de la cifra hasta `workers − 1` partidas. Si `episodes` está definido, `updates` se ignora; si no, `updates` es el límite como antes. `episodes_done` se guarda en el checkpoint, así que al reanudar con un `episodes` mayor el run sigue. El avance del panel es `episodes_done / episodes`. Los ritmos de `lr` y de entropía bajan con ese mismo avance (si no hay `episodes`, con `update / updates`).
 
 **Pausar un worker.** `paused_workers` indica los workers que no juegan. Se atiende al comienzo de cada actualización: el worker no recibe pasos (su partida queda congelada, su proceso Node en espera y sin gastar CPU) y sus muestras de ese tramo se **marcan como no válidas** (`valid[t, i] = false` en el buffer): no entran en las ventajas normalizadas, ni en los minibatches, ni en la escala de recompensa. Al reanudarlo, su partida sigue donde estaba. Si todos los workers están pausados, el run queda en `paused`.
+
+## 5b. Estadísticas por worker
+Cada worker acumula, desde que empezó el run (se guardan en `workers.json` y se recuperan al reanudar), sobre las **partidas terminadas** (una partida termina por victoria, eliminación o `maxTicks`; no es un paso):
+`stats = {games, wins, eliminated, avg_max_territory, avg_final_territory, avg_length, conquered_by_tribe, conquered_by_nation, tribes_conquered, nations_conquered, recent: [...]}`.
+- `avg_max_territory`: promedio, entre partidas, del mayor `land_share` alcanzado durante la partida; `avg_final_territory`: promedio del `land_share` al terminar. Ambos en fracción del mapa (0–1).
+- `conquered_by_*`: veces que el agente fue eliminado porque una tribu o una nación tomó su último territorio (la eliminación por otras causas cuenta en `eliminated` pero no aquí). `*_conquered`: veces que el agente eliminó a una tribu o una nación.
+- `recent`: las últimas 10 partidas `{n, result: "victoria"|"eliminado"|"tiempo", max_territory, final_territory, ticks, tribes_conquered, nations_conquered, conquered_by: "tribu"|"nación"|null}`.
+En la pantalla Run, cada worker muestra el resumen y al hacer clic se expande con el detalle, las últimas partidas y su propio registro.
 
 ## 6. CPU y prioridad
 `cpu` es el uso del árbol de procesos del run **como porcentaje de toda la PC** (0–100, igual que el Administrador de tareas): la suma de `cpu_percent` de cada proceso dividida por el número de CPU lógicas. `train.py` acepta dos ajustes de configuración: `torch_threads` (hilos de PyTorch; por defecto, los núcleos físicos menos 2, mínimo 1, para dejar dos núcleos libres a la PC) y `low_priority` (por defecto `true`: el entrenamiento y sus procesos Node corren con prioridad por debajo de lo normal, para que la PC siga usable).
