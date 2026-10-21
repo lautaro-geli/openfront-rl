@@ -51,7 +51,7 @@ Todos salen del estado del motor, tal como lo ve cualquier jugador.
 - **Tropas máximas:** ciudades (125 k × 2ⁿ, máx. 1 M; `EngineConfig.ts:378-382`) y territorio. Una ciudad triplica el tope de un jugador recién aparecido.
 - **Ingreso:** barcos mercantes de puertos (pagan a los dos dueños, `TradeShipExecution.ts:183-215`) y trenes de fábricas (`EngineConfig.ts:236-259`). Los barcos **solo salen hacia puertos de otros jugadores** (`PortExecution.ts`, `tradingPorts`) y las tribus no construyen nada (`TribeExecution.ts`). Por eso el comercio necesita **naciones**: sin ellas, un puerto no rinde.
 - **Medición con naciones (Britannia, 20 tribus Easy, política aleatoria):** con `nations: 1` la nación llega a ~90 000 casillas y termina la partida (≥80 %) en ~3200 ticks sin haber construido ningún puerto; con `nations: 2`, ~194 000 casillas en 2700 ticks. Una nación acaba la partida antes de que el comercio exista, así que **la configuración de entrenamiento sigue en `nations: disabled`** y `economy` solo mide oro de conquista hasta resolver esto (pendiente: ADR de currículo de naciones, p. ej. nación con tamaño limitado o más ticks).
-- **Presupuesto de oro por episodio:** el oro base da ~600 000 en 6000 ticks, es decir 2–3 ciudades como mucho. Las mejoras son pocas y discretas.
+- **Presupuesto de oro por episodio:** el oro base da ~600 000 por cada 6000 ticks (~1,8 M en los 18 000 del entrenamiento), es decir 3–4 mejoras de ciudad como mucho. Las mejoras son pocas y discretas.
 
 ## 5. Registro
 Cada componente viaja por separado y se registra por episodio (suma) y por paso (media), para detectar si alguno se explota (p. ej., el territorio no sube pero `defense` sí).

@@ -137,7 +137,7 @@ def evaluate(policy: Policy, env_cfg: dict[str, Any], workers: int, episodes: in
         res = vec.reset()
         acc = np.zeros((n, len(vec.manifest.reward_parts)))  # suma de componentes del episodio en curso, por entorno
         guard = 0
-        while len(done) < episodes and guard < 5000:
+        while len(done) < episodes and guard < 20000:
             guard += 1
             obs, mask = stack_obs(res)
             with torch.no_grad():

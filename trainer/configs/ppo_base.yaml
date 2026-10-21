@@ -15,7 +15,7 @@ env:
   nations: disabled
   difficulty: Easy
   decisionInterval: 10
-  maxTicks: 6000
+  maxTicks: 18000
   grid: {h: 32, w: 64}
   samples: 4
   rewardTerritoryWeight: 0.40
