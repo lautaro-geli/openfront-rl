@@ -31,7 +31,7 @@ DEFAULTS: dict[str, Any] = {
     "seed": 0,
     "device": "cpu",
     "workers": None,  # None = núcleos − 1
-    "torch_threads": None,  # None = núcleos físicos (en CPU con hyperthreading, usar todos los lógicos hace girar hilos en vacío)
+    "torch_threads": None,  # None = núcleos físicos − 2 (mín. 1): deja dos núcleos libres a la PC
     "low_priority": True,  # entrenamiento y procesos Node con prioridad por debajo de lo normal: la PC sigue usable
     "rollout_steps": 128,
     "updates": 1000,
@@ -183,7 +183,7 @@ def save_checkpoint(path: Path, policy: Policy, opt: torch.optim.Optimizer, upda
 
 def apply_resources(cfg: dict[str, Any]) -> None:
     """Limita los hilos de PyTorch y baja la prioridad (los procesos Node que se lancen después la heredan)."""
-    threads = cfg.get("torch_threads") or psutil.cpu_count(logical=False) or 1
+    threads = cfg.get("torch_threads") or max(1, (psutil.cpu_count(logical=False) or 1) - 2)
     torch.set_num_threads(int(threads))
     if cfg.get("low_priority"):
         try:
