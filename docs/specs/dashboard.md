@@ -17,7 +17,7 @@
 - `GET /api/runs/<run>/metrics?since=N` → filas de `metrics.jsonl` desde la actualización `N`.
 - `GET /api/runs/<run>/status`, `/architecture`, `/goals`, `/log?tail=200`, `/workers/<i>/log?tail=200`.
 - `GET /api/configs` → archivos de `trainer/configs/*.yaml` (sin `goals.yaml`).
-- `POST /api/runs` `{config, name?, seed?, workers?, episodes?, updates?, resume?}` → lanza un entrenamiento. `config` debe ser un archivo de `configs/`; cualquier otro campo se rechaza (400).
+- `POST /api/runs` `{config, name?, seed?, workers?, episodes?, updates?, resume?, env?: {map?, bots?, nations?, difficulty?}}` → lanza un entrenamiento. `config` debe ser un archivo de `configs/`; cualquier otro campo se rechaza (400).
 - `POST /api/runs/<run>/workers` `{worker: i, paused: bool}` → pausa o reanuda un worker.
 - `POST /api/runs/<run>/control` `{command: "pause"\|"run"\|"stop"}`; `POST /api/runs/<run>/kill`.
 
@@ -34,6 +34,12 @@ goals:
 3. **Arquitectura**: ramas → núcleo → cabezas con parámetros reales (`architecture.json`).
 4. **Metas**: lista de hitos con barra de avance y estado.
 
+## 4b. Escenario del entrenamiento
+El formulario de lanzamiento muestra, para la configuración elegida, el escenario que va a jugar el agente y deja cambiarlo: **mapa**, **tribus** (`bots`, número), **naciones** (`nations`: `disabled`, un número o `default`) y **nivel** (`difficulty`: Easy, Medium, Hard, Impossible). La API acepta esos cuatro campos en `env` con valores validados y los pasa a `train.py` como `--env clave=valor`; el valor final queda guardado en el `config.yaml` del run. El nivel (`difficulty`) lo leen las **naciones** (ritmo de ataque, alianzas, donaciones: `NationExecution.ts:92-103`, `NationAllianceBehavior.ts:101,185`) y las relaciones tras un ataque (`AttackExecution.ts:199-222`); `TribeExecution` no lo usa, así que sin naciones el nivel casi no influye.
+
+## 4c. Run nuevo en una carpeta con datos
+Si se lanza sin `resume` y la carpeta del run ya tiene `metrics.jsonl`, `train.py` mueve los archivos anteriores (métricas, estadísticas, checkpoints, registros) a `anterior-<fecha>/` dentro del mismo run, para no mezclar dos entrenamientos en un solo `metrics.jsonl`.
+
 ## 5. Duración del run y workers pausados
 **Duración.** El run se mide en **partidas** (episodios terminados por los workers de entrenamiento; las de evaluación no cuentan): `episodes` en la configuración, `--episodes N` en la línea de comandos o el campo "Partidas" del panel. El run termina al cierre de la primera actualización en la que `episodes_done >= episodes`, así que puede pasarse de la cifra hasta `workers − 1` partidas. Si `episodes` está definido, `updates` se ignora; si no, `updates` es el límite como antes. `episodes_done` se guarda en el checkpoint, así que al reanudar con un `episodes` mayor el run sigue. El avance del panel es `episodes_done / episodes`. Los ritmos de `lr` y de entropía bajan con ese mismo avance (si no hay `episodes`, con `update / updates`).
 
@@ -41,10 +47,10 @@ goals:
 
 ## 5b. Estadísticas por worker
 Cada worker acumula, desde que empezó el run (se guardan en `workers.json` y se recuperan al reanudar), sobre las **partidas terminadas** (una partida termina por victoria, eliminación o `maxTicks`; no es un paso):
-`stats = {games, wins, eliminated, avg_max_territory, avg_final_territory, avg_length, conquered_by_tribe, conquered_by_nation, tribes_conquered, nations_conquered, recent: [...]}`.
+`stats = {games, wins, eliminated, avg_max_territory, avg_final_territory, avg_length, conquered_by_tribe, conquered_by_nation, tribes_conquered, nations_conquered, built: {city, port, factory, post, sam, silo, warship}, nukes_launched, recent: [...]}`.
 - `avg_max_territory`: promedio, entre partidas, del mayor `land_share` alcanzado durante la partida; `avg_final_territory`: promedio del `land_share` al terminar. Ambos en fracción del mapa (0–1).
 - `conquered_by_*`: veces que el agente fue eliminado porque una tribu o una nación tomó su último territorio (la eliminación por otras causas cuenta en `eliminated` pero no aquí). `*_conquered`: veces que el agente eliminó a una tribu o una nación.
-- `recent`: las últimas 10 partidas `{n, result: "victoria"|"eliminado"|"tiempo", max_territory, final_territory, ticks, tribes_conquered, nations_conquered, conquered_by: "tribu"|"nación"|null}`.
+- `built`: total de estructuras colocadas por el agente en las partidas terminadas del worker (por tipo); `recent`: las últimas 10 partidas `{n, built: {...}, nukes_launched, result: "victoria"|"eliminado"|"tiempo", max_territory, final_territory, ticks, tribes_conquered, nations_conquered, conquered_by: "tribu"|"nación"|null}`.
 En la pantalla Run, cada worker muestra el resumen y al hacer clic se expande con el detalle, las últimas partidas y su propio registro.
 
 ## 6. CPU y prioridad

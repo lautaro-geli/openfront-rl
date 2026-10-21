@@ -73,7 +73,8 @@ ABBR = {"territory": "terr", "attack": "atq", "economy": "eco", "defense": "def"
 
 
 # (etiqueta de consola, evento): lo que se muestra por episodio; el resto queda en metrics.jsonl como ep_ev_*.
-EV_SHOW = [("atq", "attack_orders"), ("a_trib", "attack_tribe_orders"), ("tribus", "tribes_conquered"), ("nuke", "nuke_orders")]
+EV_SHOW = [("atq", "attack_orders"), ("a_trib", "attack_tribe_orders"), ("tribus", "tribes_conquered"), ("nuke", "nukes_launched"),
+           ("ciu", "built_city"), ("pue", "built_port"), ("fab", "built_factory"), ("pst", "built_post")]
 
 
 class Runner:
@@ -211,6 +212,38 @@ def apply_resources(cfg: dict[str, Any]) -> None:
             pass
 
 
+RUN_FILES = ("metrics.jsonl", "workers.json", "status.json", "architecture.json", "control.json", "config.yaml", "workers")
+
+
+def archive_previous(run: Path) -> Path | None:
+    """Un run nuevo en una carpeta con datos no mezcla filas: lo anterior pasa a `anterior-<fecha>/` (dashboard.md §4c)."""
+    old = [p for p in (*(run / n for n in RUN_FILES), *run.glob("*.pt")) if p.exists()]
+    if not (run / "metrics.jsonl").exists():
+        return None
+    dest = run / f"anterior-{time.strftime('%Y%m%d-%H%M%S')}"
+    dest.mkdir()
+    for p in old:
+        p.rename(dest / p.name)
+    return dest
+
+
+def parse_env(items: list[str]) -> dict[str, Any]:
+    """`--env bots=30 --env nations=disabled`: valores numéricos como número, el resto como texto."""
+    out: dict[str, Any] = {}
+    for it in items:
+        k, sep, v = it.partition("=")
+        if not sep or not k:
+            raise SystemExit(f"--env espera clave=valor, recibí {it!r}")
+        out[k] = int(v) if v.lstrip("-").isdigit() else v
+    return out
+
+
+def scenario_text(env: dict[str, Any]) -> str:
+    n = env.get("nations", "default")
+    nations = "sin naciones" if n == "disabled" else f"{n} naciones"
+    return (f"mapa {env.get('map', '?')} | {env.get('bots', '?')} tribus | {nations} | nivel de las naciones {env.get('difficulty', '?')}")
+
+
 def train(cfg: dict[str, Any], run_dir: str | Path | None = None, resume: str | Path | None = None, log: bool = True) -> Path:
     seed = int(cfg["seed"])
     apply_resources(cfg)
@@ -219,6 +252,8 @@ def train(cfg: dict[str, Any], run_dir: str | Path | None = None, resume: str | 
     device = torch.device(cfg["device"])
     run = Path(run_dir or f"runs/{cfg['name']}-{seed}")
     run.mkdir(parents=True, exist_ok=True)
+    if resume is None:
+        archive_previous(run)
     (run / "config.yaml").write_text(yaml.safe_dump(cfg, sort_keys=False, allow_unicode=True), encoding="utf8")
 
     workers = cfg["workers"] or default_workers()
@@ -247,6 +282,7 @@ def train(cfg: dict[str, Any], run_dir: str | Path | None = None, resume: str | 
         runctl.write_json(run / "architecture.json", runctl.architecture(policy))
         runctl.write_json(run / "control.json", {"command": "run"})
         if log:
+            print(f"escenario: {scenario_text(cfg['env'])}", flush=True)
             print(f"run={run} workers={workers} params={n_params:,} T={T} protocolo=v{m.raw['version']}", flush=True)
         total = int(cfg["updates"])
         goal = int(cfg["episodes"]) if cfg.get("episodes") else None  # duración en partidas (docs/specs/dashboard.md §5)
@@ -354,8 +390,11 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--episodes", type=int, default=None)
     ap.add_argument("--workers", type=int, default=None)
     ap.add_argument("--seed", type=int, default=None)
+    ap.add_argument("--env", action="append", default=[], metavar="CLAVE=VALOR", help="cambia el escenario (map, bots, nations, difficulty); se puede repetir")
     a = ap.parse_args(argv)
     over: dict[str, Any] = {k: v for k, v in (("updates", a.updates), ("episodes", a.episodes), ("workers", a.workers), ("seed", a.seed)) if v is not None}
+    if a.env:
+        over["env"] = parse_env(a.env)
     train(load_config(a.config, over), a.run_dir, a.resume)
 
 

@@ -2,7 +2,7 @@
 import { PlayerType } from "@openfront/engine-api/game/GameTypes";
 import type { StampedIntent } from "@openfront/engine-api/Schemas";
 import type { Game, Player } from "@openfront/engine/game/Game";
-import { NUKE_UNIT } from "./mask";
+import { BUILD_UNIT, NUKE_UNIT } from "./mask";
 
 export const EVENT_NAMES = [
   "attack_orders",
@@ -15,6 +15,14 @@ export const EVENT_NAMES = [
   "nations_conquered",
   "conquered_by_tribe",
   "conquered_by_nation",
+  "built_city",
+  "built_port",
+  "built_factory",
+  "built_post",
+  "built_sam",
+  "built_silo",
+  "built_warship",
+  "nukes_launched",
 ] as const;
 export type Events = Record<(typeof EVENT_NAMES)[number], number>;
 
@@ -29,6 +37,14 @@ export const zeroEvents = (): Events => ({
   nations_conquered: 0,
   conquered_by_tribe: 0,
   conquered_by_nation: 0,
+  built_city: 0,
+  built_port: 0,
+  built_factory: 0,
+  built_post: 0,
+  built_sam: 0,
+  built_silo: 0,
+  built_warship: 0,
+  nukes_launched: 0,
 });
 
 const NUKE_UNITS = new Set<unknown>(Object.values(NUKE_UNIT));
@@ -67,4 +83,13 @@ export function countConquest(ev: Events, conquered: Player): void {
 export function countConqueredBy(ev: Events, conqueror: Player): void {
   if (conqueror.type() === PlayerType.Bot) ev.conquered_by_tribe++;
   else if (conqueror.type() === PlayerType.Nation) ev.conquered_by_nation++;
+}
+
+const BUILT_EVENT = Object.fromEntries(Object.entries(BUILD_UNIT).map(([name, unit]) => [String(unit), `built_${name}`])) as Record<string, keyof Events>;
+
+/** Suma una unidad que el agente acaba de colocar (las capturadas no pasan por `buildUnit`). */
+export function countBuilt(ev: Events, unit: unknown): void {
+  const key = BUILT_EVENT[String(unit)];
+  if (key !== undefined) ev[key]++;
+  else if (NUKE_UNITS.has(unit)) ev.nukes_launched++;
 }

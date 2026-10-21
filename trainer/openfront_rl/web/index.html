@@ -109,17 +109,37 @@ async function viewProcesos(m) {
     ev.preventDefault(); err.textContent = "";
     const d = Object.fromEntries(new FormData(f));
     const body = {config: d.config}; if (d.name) body.name = d.name;
+    const env = {map: d.map, difficulty: d.difficulty, bots: parseInt(d.bots, 10), nations: d.nations_mode === "number" ? parseInt(d.nations_n, 10) : d.nations_mode};
+    body.env = Object.fromEntries(Object.entries(env).filter(([, v]) => v !== "" && !Number.isNaN(v)));
     for (const k of ["seed", "workers", "episodes"]) if (d[k] !== "") body[k] = parseInt(d[k], 10);
     if (d.resume) body.resume = true;
     try { const r = await api("/runs", body); run = r.name; tab = "run"; metrics = []; lastUpdate = 0; nav(); render(); } catch (e) { err.textContent = e.message; }
   }},
-    h("label", {}, "Configuración", h("select", {name: "config"}, cfgs.map(c => h("option", {value: c}, c)))),
+    h("label", {}, "Configuración", h("select", {name: "config", onchange: ev => loadScenario(ev.target.value)}, cfgs.map(c => h("option", {value: c}, c)))),
     h("label", {}, "Nombre (opcional)", h("input", {name: "name", placeholder: "auto"})),
     h("label", {}, "Semilla", h("input", {name: "seed", type: "number", min: 0, placeholder: "config"})),
     h("label", {}, "Workers", h("input", {name: "workers", type: "number", min: 1, placeholder: "2"})),
     h("label", {}, "Partidas", h("input", {name: "episodes", type: "number", min: 1, placeholder: "config"})),
     h("label", {}, "Reanudar", h("input", {name: "resume", type: "checkbox"})),
+    h("fieldset", {class: "box", style: "flex:1 1 100%"}, h("legend", {}, "Escenario de la partida"),
+      h("label", {}, "Mapa", h("select", {name: "map"}, ["Britannia", "World"].map(x => h("option", {value: x}, x)))),
+      h("label", {}, "Tribus (bots)", h("input", {name: "bots", type: "number", min: 0, max: 400})),
+      h("label", {}, "Naciones", h("select", {name: "nations_mode"}, [["disabled", "sin naciones"], ["default", "las del mapa"], ["number", "cantidad…"]].map(([v, t]) => h("option", {value: v}, t)))),
+      h("label", {}, "Cantidad de naciones", h("input", {name: "nations_n", type: "number", min: 1, max: 100})),
+      h("label", {}, "Nivel de las naciones", h("select", {name: "difficulty"}, ["Easy", "Medium", "Hard", "Impossible"].map(x => h("option", {value: x}, x)))),
+      h("small", {id: "scn", class: "muted"}, "")),
     h("button", {class: "pri", type: "submit"}, "Lanzar"));
+  const loadScenario = async c => {
+    try {
+      const e = (await api(`/configs/${c}`)).env || {};
+      const set = (n, v) => { if (f.elements[n] && v !== undefined) f.elements[n].value = v; };
+      set("map", e.map); set("bots", e.bots); set("difficulty", e.difficulty);
+      const n = e.nations ?? "default";
+      set("nations_mode", typeof n === "number" ? "number" : n); set("nations_n", typeof n === "number" ? n : "");
+      f.querySelector("#scn").textContent = "El nivel lo usan solo las naciones (ritmo de ataque, alianzas); las tribus no lo usan, así que sin naciones casi no influye.";
+    } catch (err) { /* sin escenario: el formulario queda en blanco */ }
+  };
+  loadScenario(cfgs[0]);
   const act = (name, cmd, label, cls = "") => h("button", {class: "b " + cls, onclick: async () => { try { await (cmd === "kill" ? api(`/runs/${name}/kill`, {}) : api(`/runs/${name}/control`, {command: cmd})); } catch (e) { alert(e.message); } render(); }}, label);
   const tbl = h("table", {}, h("thead", {}, h("tr", {}, ["Run", "Estado", "Partidas", "Pasos/s", "Retorno", "CPU PC %", "Mem MB", "Procesos", ""].map(t => h("th", {}, t)))),
     h("tbody", {}, runs.map(r => h("tr", {}, h("td", {}, h("a", {href: "#", onclick: e => { e.preventDefault(); run = r.name; tab = "run"; metrics = []; lastUpdate = 0; nav(); render(); }}, r.name)), h("td", {}, pill(r.state)),
@@ -138,12 +158,15 @@ async function viewRun(m) {
   const prog = s.episodes_total ? Math.min(100, 100 * (s.episodes_done || 0) / s.episodes_total) : s.total ? Math.min(100, 100 * (s.update || 0) / s.total) : 0;
   const stat = (k, v) => h("div", {class: "stat"}, h("div", {class: "v"}, v), h("div", {class: "k"}, k));
   const wbtn = w => h("button", {class: "b", style: "margin-top:6px", onclick: async ev => { ev.stopPropagation(); try { await api(`/runs/${run}/workers`, {worker: w.i, paused: !w.paused}); } catch (e) { alert(e.message); } render(); }}, w.paused ? "Reanudar worker" : "Pausar worker");
+  const BL = {city: "ciudades", port: "puertos", factory: "fábricas", post: "puestos de defensa", sam: "SAM", silo: "silos", warship: "barcos de guerra"};
+  const builtText = g => { const p = Object.entries(g.built || {}).filter(([, v]) => v).map(([k, v]) => `${v} ${BL[k]}`); if (g.nukes_launched) p.push(`${g.nukes_launched} misiles`); return p.join(", ") || "nada"; };
+  const scenario = c => { const e = (c || {}).env || {}; const n = e.nations ?? "default"; return `${e.map || "?"} · ${e.bots ?? "?"} tribus · ${n === "disabled" ? "sin naciones" : (typeof n === "number" ? n + " naciones" : "naciones del mapa")} · nivel ${e.difficulty || "?"}`; };
   const pc = x => x == null ? "–" : (100 * x).toFixed(1) + " %";
   const wlogs = {};
   await Promise.all([...expanded].map(async i => { try { wlogs[i] = (await api(`/runs/${run}/workers/${i}/log?tail=40`)).log; } catch (e) { wlogs[i] = ""; } }));
   const workerCard = w => {
     const t = w.stats || {}, open = expanded.has(w.i);
-    const recent = (t.recent || []).slice().reverse().map(g => h("tr", {}, h("td", {}, g.n), h("td", {}, g.result), h("td", {}, pc(g.max_territory)), h("td", {}, pc(g.final_territory)), h("td", {}, g.ticks), h("td", {}, g.tribes_conquered), h("td", {}, g.nations_conquered), h("td", {}, g.conquered_by || "–")));
+    const recent = (t.recent || []).slice().reverse().map(g => h("tr", {}, h("td", {}, g.n), h("td", {}, g.result), h("td", {}, pc(g.max_territory)), h("td", {}, pc(g.final_territory)), h("td", {}, g.ticks), h("td", {}, g.tribes_conquered), h("td", {}, g.nations_conquered), h("td", {}, g.conquered_by || "–"), h("td", {}, builtText(g))));
     return h("div", {class: "box", style: (w.paused ? "opacity:.7;" : "") + "cursor:pointer;flex:1 1 " + (open ? "100%" : "260px"), onclick: () => { open ? expanded.delete(w.i) : expanded.add(w.i); render(); }},
       h("b", {}, (open ? "▾ " : "▸ ") + "Worker " + (w.i + 1) + (w.paused ? " · en pausa" : "")),
       h("small", {}, `tick ${w.tick} · partida en curso: ${w.ep_len} pasos`),
@@ -156,17 +179,18 @@ async function viewRun(m) {
           stat("  · una tribu", fmt(t.conquered_by_tribe, 0)), stat("  · una nación", fmt(t.conquered_by_nation, 0)),
           stat("Conquistó", fmt((t.tribes_conquered || 0) + (t.nations_conquered || 0), 0)),
           stat("  · tribus", fmt(t.tribes_conquered, 0)), stat("  · naciones", fmt(t.nations_conquered, 0)),
+          Object.keys(BL).map(k => stat("Construyó · " + BL[k], fmt((t.built || {})[k], 0))), stat("Misiles lanzados", fmt(t.nukes_launched, 0)),
           stat("Victorias", fmt(t.wins, 0)), stat("Eliminado", fmt(t.eliminated, 0)), stat("Duración media (ticks)", fmt(t.avg_length, 0))),
         h("h2", {style: "margin-top:12px"}, "Últimas partidas"),
-        recent.length ? h("div", {class: "scroll"}, h("table", {}, h("thead", {}, h("tr", {}, ["N.º", "Resultado", "Terr. máx.", "Terr. final", "Ticks", "Tribus", "Naciones", "Lo conquistó"].map(x => h("th", {}, x)))), h("tbody", {}, recent))) : h("span", {class: "muted"}, "todavía no terminó ninguna partida"),
+        recent.length ? h("div", {class: "scroll"}, h("table", {}, h("thead", {}, h("tr", {}, ["N.º", "Resultado", "Terr. máx.", "Terr. final", "Ticks", "Tribus", "Naciones", "Lo conquistó", "Construyó"].map(x => h("th", {}, x)))), h("tbody", {}, recent))) : h("span", {class: "muted"}, "todavía no terminó ninguna partida"),
         h("h2", {style: "margin-top:12px"}, "Registro de este worker"), h("pre", {}, wlogs[w.i] || "(vacío)")) : "");
   };
   const workers = (s.workers || []).map(workerCard);
   const sp = []; for (let i = 1; i < metrics.length; i++) { const a = metrics[i - 1], b = metrics[i]; if (b.time > a.time) sp.push({x: b.update, y: (b.steps - a.steps) / (b.time - a.time)}); }
-  const ents = ["ep_ev_attack_orders", "ep_ev_attack_tribe_orders", "ep_ev_tribes_conquered", "ep_ev_nuke_orders", "ep_ev_build_orders"];
-  const labels = ["ataques", "ataques a tribus", "tribus conquistadas", "misiles", "construcciones"];
+  const ents = ["ep_ev_attack_orders", "ep_ev_attack_tribe_orders", "ep_ev_tribes_conquered", "ep_ev_nukes_launched", "ep_ev_build_orders", "ep_ev_built_city", "ep_ev_built_port", "ep_ev_built_factory", "ep_ev_built_post"];
+  const labels = ["ataques", "ataques a tribus", "tribus conquistadas", "misiles", "órdenes de construir", "ciudades", "puertos", "fábricas", "puestos"];
   m.replaceChildren(
-    h("div", {class: "card"}, h("div", {class: "row"}, h("div", {class: "box"}, h("b", {}, run), pill(st.state), " ", st.state === "running" ? h("button", {class: "b", onclick: () => api(`/runs/${run}/control`, {command: "pause"}).then(render)}, "Pausar") : st.state === "paused" ? h("button", {class: "b", onclick: () => api(`/runs/${run}/control`, {command: "run"}).then(render)}, "Reanudar") : ""),
+    h("div", {class: "card"}, h("div", {class: "row"}, h("div", {class: "box"}, h("b", {}, run), pill(st.state), h("small", {}, scenario(st.config)), " ", st.state === "running" ? h("button", {class: "b", onclick: () => api(`/runs/${run}/control`, {command: "pause"}).then(render)}, "Pausar") : st.state === "paused" ? h("button", {class: "b", onclick: () => api(`/runs/${run}/control`, {command: "run"}).then(render)}, "Reanudar") : ""),
       h("div", {class: "box grid"}, stat("Partidas", s.episodes_total ? `${s.episodes_done ?? 0}/${s.episodes_total}` : "–"), stat("Actualización", s.total ? `${s.update}/${s.total}` : fmt(s.update, 0)), stat("Pasos totales", fmt(s.steps, 0)), stat("Pasos/s", fmt(s.steps_per_s, 0)), stat("CPU de la PC %", fmt(u.cpu, 0)), stat("Memoria MB", fmt(u.mem_mb, 0)))),
       h("div", {class: "bar", style: "margin-top:10px"}, h("i", {style: `width:${prog}%`}))),
     h("div", {class: "card"}, h("h2", {}, "Workers (tocá uno para ver el detalle y su registro; pausar se aplica al empezar la próxima actualización)"), workers.length ? h("div", {class: "row"}, workers) : h("span", {class: "muted"}, "sin datos todavía")),

@@ -8,7 +8,7 @@ import urllib.request
 import pytest
 import yaml
 
-from openfront_rl.dashboard import Panel, make_server
+from openfront_rl.dashboard import ApiError, Panel, make_server
 
 CFG = {
     "name": "panel", "seed": 1, "rollout_steps": 8, "updates": 400, "checkpoint_every": 1000, "workers": 1,
@@ -163,3 +163,37 @@ def test_estadisticas_y_registro_por_worker(panel):
     assert call(panel, "/api/runs/e1/workers/x/log")[0] == 400
     assert (panel.runs_dir / "e1" / "workers.json").exists()
     call(panel, "/api/runs/e1/kill", {})
+
+
+def test_escenario_de_la_config_y_validacion_de_env(panel):
+    e = panel.config_env("mini.yaml")
+    assert e["env"]["bots"] == 5 and "Impossible" in e["difficulties"]
+    assert panel.env_args({"bots": 30, "nations": "disabled", "difficulty": "Hard", "map": "World"}) == [
+        "--env", "bots=30", "--env", "nations=disabled", "--env", "difficulty=Hard", "--env", "map=World"]
+    assert panel.env_args({"nations": 7}) == ["--env", "nations=7"]
+    for bad in ({"bots": -1}, {"bots": "x"}, {"nations": 0}, {"nations": "muchas"}, {"difficulty": "Dios"}, {"map": "../x"}, {"otra": 1}):
+        with pytest.raises(ApiError):
+            panel.env_args(bad)
+
+
+def test_run_nuevo_archiva_lo_anterior_y_env_llega_al_config(tmp_path):
+    from openfront_rl.train import archive_previous, parse_env
+    run = tmp_path / "r"
+    run.mkdir()
+    (run / "metrics.jsonl").write_text('{"update": 1}\n')
+    (run / "latest.pt").write_bytes(b"x")
+    dest = archive_previous(run)
+    assert dest is not None and (dest / "metrics.jsonl").exists() and (dest / "latest.pt").exists()
+    assert not (run / "metrics.jsonl").exists() and archive_previous(run) is None
+    assert parse_env(["bots=30", "nations=disabled"]) == {"bots": 30, "nations": "disabled"}
+
+
+def test_estadisticas_de_worker_cuentan_construcciones():
+    from openfront_rl.workers import WorkerStats, game_line
+    ws = WorkerStats(1)
+    g = ws.end_game(0, won=False, eliminated=False, max_territory=0.1, final_territory=0.1, ticks=100,
+                    events={"built_city": 2, "built_port": 1, "nukes_launched": 1})
+    ws.end_game(0, won=False, eliminated=False, max_territory=0.1, final_territory=0.1, ticks=100, events={"built_city": 1})
+    s = ws.summary(0)
+    assert s["built"]["city"] == 3 and s["built"]["port"] == 1 and s["nukes_launched"] == 1
+    assert "2 ciudades" in game_line(g) and "1 puertos" in game_line(g) or "1 puerto" in game_line(g)

@@ -1,6 +1,7 @@
 import { Difficulty, PlayerType, UnitType } from "@openfront/engine-api/game/GameTypes";
 import { describe, expect, it } from "vitest";
 import { countConqueredBy, countConquest, countIntentEvents, EVENT_NAMES, zeroEvents } from "../src/events";
+import { CELL_KINDS } from "../src/features";
 import { HeuristicPolicy } from "../src/heuristicPolicy";
 import { MultiAgentEnv } from "../src/multiEnv";
 
@@ -48,6 +49,33 @@ describe("eventos del paso", () => {
     expect(tot.attack_orders + tot.expand_orders).toBeGreaterThan(0);
     expect(tot.attack_tribe_orders).toBeLessThanOrEqual(tot.attack_orders);
   }, 240000);
+
+  it("cuenta las construcciones realmente colocadas por el agente (no las órdenes ni las capturadas)", async () => {
+    const env = await MultiAgentEnv.create({ bots: 20, nations: "disabled", difficulty: Difficulty.Easy, maxTicks: 6000 });
+    const pol = new HeuristicPolicy("ev-b", env.cfg.grid);
+    let obs = await env.reset("ev-b");
+    const tot = zeroEvents();
+    const cells = env.cfg.grid.h * env.cfg.grid.w;
+    for (let i = 0; i < 120; i++) {
+      const o = obs[0];
+      let act = pol.act(o);
+      // Tras la expansión inicial, el agente pide la primera estructura permitida por la máscara (la que pueda pagar).
+      const cell = i >= 40 && i % 10 === 0 ? o.mask.cell.slice(CELL_KINDS.indexOf("build") * cells, (CELL_KINDS.indexOf("build") + 1) * cells).findIndex((x) => x === 1) : -1;
+      const type = [0, 1, 2, 3, 4, 5].find((t) => o.mask.buildType[t] === 1);
+      if (cell >= 0 && type !== undefined) act = { kind: "build", row: 0, cell, fraction: 0.5, type, aux: 0 } as never;
+      const r = env.step([act]);
+      obs = r.obs;
+      for (const k of EVENT_NAMES) tot[k] += r.info[0].events[k];
+      if (r.done) break;
+    }
+    const me = env.unsafeGame().allPlayers().find((p) => p.clientID() === "rl-agent-0")!;
+    const built = tot.built_city + tot.built_port + tot.built_factory + tot.built_post + tot.built_sam + tot.built_silo;
+    const owned = [UnitType.City, UnitType.Port, UnitType.Factory, UnitType.DefensePost, UnitType.SAMLauncher, UnitType.MissileSilo].reduce((n, u) => n + me.units(u).length, 0);
+    expect(built).toBeGreaterThan(0);
+    expect(built).toBeLessThanOrEqual(tot.build_orders);
+    expect(built).toBeGreaterThanOrEqual(owned);
+    expect(tot.nukes_launched).toBe(0);
+  }, 300000);
 
   it("cuenta las tribus conquistadas por el agente cuando ataca a sus vecinos", async () => {
     const env = await MultiAgentEnv.create({ bots: 20, nations: "disabled", difficulty: Difficulty.Easy, maxTicks: 18000 });

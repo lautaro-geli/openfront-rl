@@ -31,7 +31,10 @@ except ImportError:  # pragma: no cover
 TRAINER_DIR = Path(__file__).resolve().parent.parent
 WEB_DIR = Path(__file__).resolve().parent / "web"
 NAME_RE = re.compile(r"^[A-Za-z0-9_.-]{1,64}$")
-LAUNCH_KEYS = {"config", "name", "seed", "workers", "episodes", "updates", "resume"}
+LAUNCH_KEYS = {"config", "name", "seed", "workers", "episodes", "updates", "resume", "env"}
+ENV_KEYS = {"map", "bots", "nations", "difficulty"}
+DIFFICULTIES = ("Easy", "Medium", "Hard", "Impossible")
+MAPS = ("Britannia", "World")
 STALE_S = 180.0  # un run "running" sin actualizar tanto tiempo se muestra como caído si su proceso no existe
 
 
@@ -168,6 +171,35 @@ class Panel:
     def configs(self) -> list[str]:
         return sorted(p.name for p in self.configs_dir.glob("*.yaml") if p.name != "goals.yaml")
 
+    def config_env(self, name: str) -> dict[str, Any]:
+        """Escenario (`env`) de una configuración, para mostrarlo y editarlo en el formulario de lanzamiento."""
+        if name not in self.configs():
+            raise ApiError(404, "config desconocida")
+        cfg = yaml.safe_load((self.configs_dir / name).read_text(encoding="utf8")) or {}
+        return {"env": cfg.get("env", {}), "maps": list(MAPS), "difficulties": list(DIFFICULTIES)}
+
+    @staticmethod
+    def env_args(env: Any) -> list[str]:
+        """Valida `env` y lo convierte en `--env clave=valor` (lista cerrada de claves y valores)."""
+        if env is None:
+            return []
+        if not isinstance(env, dict) or set(env) - ENV_KEYS:
+            raise ApiError(400, f"env solo admite {sorted(ENV_KEYS)}")
+        out: list[str] = []
+        for k, v in env.items():
+            if v is None or v == "":
+                continue
+            if k == "map" and v not in MAPS:
+                raise ApiError(400, f"map debe ser uno de {list(MAPS)}")
+            if k == "difficulty" and v not in DIFFICULTIES:
+                raise ApiError(400, f"difficulty debe ser uno de {list(DIFFICULTIES)}")
+            if k == "bots" and (not isinstance(v, int) or isinstance(v, bool) or not 0 <= v <= 400):
+                raise ApiError(400, "bots debe ser un entero entre 0 y 400")
+            if k == "nations" and not (v in ("disabled", "default") or (isinstance(v, int) and not isinstance(v, bool) and 1 <= v <= 100)):
+                raise ApiError(400, "nations debe ser 'disabled', 'default' o un entero entre 1 y 100")
+            out += ["--env", f"{k}={v}"]
+        return out
+
     def goals(self, name: str) -> list[dict[str, Any]]:
         spec = yaml.safe_load((self.configs_dir / "goals.yaml").read_text(encoding="utf8")) or {}
         rows = self.metrics(name)
@@ -196,6 +228,7 @@ class Panel:
                 if not isinstance(body[key], int) or isinstance(body[key], bool) or body[key] < (0 if key == "seed" else 1):
                     raise ApiError(400, f"{key} debe ser un entero válido")
                 args += [flag, str(body[key])]
+        args += self.env_args(body.get("env"))
         name = str(body.get("name") or f"{cfg.get('name', 'run')}-{seed}")
         if not NAME_RE.match(name):
             raise ApiError(400, "nombre de run inválido")
@@ -289,6 +322,8 @@ def make_handler(panel: Panel):
                     return self._json(panel.list_runs())
                 if method == "GET" and a == ["configs"]:
                     return self._json(panel.configs())
+                if method == "GET" and len(a) == 2 and a[0] == "configs":
+                    return self._json(panel.config_env(a[1]))
                 if method == "POST" and a == ["runs"]:
                     return self._json(panel.launch(body), 201)
                 if len(a) >= 3 and a[0] == "runs":

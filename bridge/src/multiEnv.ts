@@ -17,13 +17,14 @@ import { simpleHash } from "@openfront/engine-lib/Util";
 import { EngineConfig } from "@openfront/engine/configuration/EngineConfig";
 import { Executor } from "@openfront/engine/execution/ExecutionManager";
 import type { Game, Player } from "@openfront/engine/game/Game";
+import type { UnitType } from "@openfront/engine-api/game/GameTypes";
 import { createGame } from "@openfront/engine/game/GameImpl";
 import { createNationsForGame } from "@openfront/engine/game/NationCreation";
 import { GameRunner } from "@openfront/engine/GameRunner";
 import { loadMapFiles } from "@openfront/shared/GameMapLoader";
 import { actionToIntents, computeMaskInfo, type MaskInfo } from "./actions";
 import { emptyMask } from "./mask";
-import { countConqueredBy, countConquest, countIntentEvents, zeroEvents, type Events } from "./events";
+import { countBuilt, countConqueredBy, countConquest, countIntentEvents, zeroEvents, type Events } from "./events";
 import { computeRewardParts, newRewardState, sumParts, type RewardState } from "./reward";
 import { FsMapLoader } from "./mapLoader";
 import {
@@ -85,6 +86,8 @@ interface Episode {
   done: boolean;
   /** Conquistas ocurridas durante el paso en curso: [conquistador, conquistado]. */
   conquests: [Player, Player][];
+  /** Unidades colocadas por cada agente durante el paso en curso (índice de agente → tipos). */
+  built: UnitType[][];
 }
 
 /**
@@ -173,6 +176,7 @@ export class MultiAgentEnv {
       spawnEndTick: null,
       done: false,
       conquests: [],
+      built: [],
     } as unknown as Episode;
     ep.runner = new GameRunner(game, new Executor(game, start.gameID, clientIdFor(0)), (gu) => {
       if ("errMsg" in gu) {
@@ -193,6 +197,14 @@ export class MultiAgentEnv {
     ep.agents = start.players.map((p) => {
       const me = game.playerByClientID(p.clientID);
       if (me === null) throw new Error(`el jugador ${p.clientID} no existe en la partida`);
+      // Se cuentan las unidades que el agente coloca de verdad (envolviendo su instancia, no el motor).
+      const index = ep.built.length;
+      ep.built.push([]);
+      const buildUnit = me.buildUnit.bind(me) as (...a: unknown[]) => unknown;
+      (me as unknown as { buildUnit: (...a: unknown[]) => unknown }).buildUnit = (type: unknown, ...rest: unknown[]) => {
+        ep.built[index].push(type as UnitType);
+        return buildUnit(type, ...rest);
+      };
       return { clientID: p.clientID, me, rs: newRewardState(), eliminated: false, maskInfo: null };
     });
     ep.plan = buildSamplePlan(game, cfg.grid.h, cfg.grid.w, cfg.samples);
@@ -212,6 +224,7 @@ export class MultiAgentEnv {
     const invalid: boolean[] = [];
     const events: Events[] = agents.map(() => zeroEvents());
     ep.conquests = [];
+    ep.built.forEach((b) => (b.length = 0));
     agents.forEach((a, i) => {
       if (a.eliminated) {
         invalid.push(false);
@@ -255,6 +268,7 @@ export class MultiAgentEnv {
       const wasEliminated = a.eliminated;
       const eliminatedNow = afterSpawn && !a.me.isAlive();
       const won = ep.sawWin && winner === a.me;
+      for (const t of ep.built[i]) countBuilt(events[i], t);
       for (const [by, who] of ep.conquests) {
         if (by === a.me) countConquest(events[i], who);
         else if (who === a.me) countConqueredBy(events[i], by);
