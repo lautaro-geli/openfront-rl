@@ -28,6 +28,8 @@ export interface EnvConfig {
   territoryKneeShare: number;
   /** Tipos de acción que se apagan en la máscara (docs/specs/actions.md §4b). */
   disabledActions: string[];
+  /** Máximo simultáneo por tipo de estructura (docs/specs/actions.md §4b). */
+  maxStructures: Record<string, number>;
   /** Número de jugadores controlados por código en la partida (MultiAgentEnv). */
   agents: number;
 }

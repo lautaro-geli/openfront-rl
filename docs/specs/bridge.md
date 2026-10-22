@@ -109,3 +109,6 @@ Comunicación con Python, varias partidas en paralelo, construcción de edificio
 
 ## Configuración: `disabledActions`
 Lista de tipos de acción (`ACTION_KINDS`) que el entorno trata como no disponibles: se ponen a 0 en `mask.kind` tras calcular la observación (`MultiAgentEnv.observeAll`) y, como la traducción de acciones valida contra esa máscara, una orden de ese tipo cuenta como inválida. Nombres desconocidos hacen fallar `create`. Ver `docs/specs/actions.md` §4b.
+
+## Configuración: `maxStructures`
+Mapa tipo de estructura → máximo simultáneo (por defecto vacío). `MultiAgentEnv.observeAll` cuenta las unidades activas del agente de ese tipo (incluidas las que se están construyendo) y, al llegar al tope, pone a 0 el tipo en `mask.buildType`; si no queda ningún tipo, también `mask.kind[build]`. Tipos desconocidos hacen fallar `create`. Ver `docs/specs/actions.md` §4b.

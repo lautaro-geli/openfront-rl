@@ -1,7 +1,7 @@
 import { Difficulty, PlayerType, UnitType } from "@openfront/engine-api/game/GameTypes";
 import { describe, expect, it } from "vitest";
 import { countConqueredBy, countConquest, countIntentEvents, EVENT_NAMES, zeroEvents } from "../src/events";
-import { CELL_KINDS, KIND } from "../src/features";
+import { BUILD_TYPES, CELL_KINDS, KIND } from "../src/features";
 import { HeuristicPolicy } from "../src/heuristicPolicy";
 import { MultiAgentEnv } from "../src/multiEnv";
 
@@ -142,4 +142,30 @@ describe("eventos del paso", () => {
     expect(r.info[0].invalidAction).toBe(true);
     await expect(MultiAgentEnv.create({ disabledActions: ["nada"] })).rejects.toThrow(/desconocidas/);
   }, 60000);
+
+  it("maxStructures apaga el tipo al llegar al tope y rechaza tipos desconocidos", async () => {
+    const env = await MultiAgentEnv.create({ bots: 5, nations: "disabled", maxTicks: 6000, maxStructures: { post: 1 } });
+    const pol = new HeuristicPolicy("ev-6", env.cfg.grid);
+    let obs = await env.reset("ev-6");
+    const cells = env.cfg.grid.h * env.cfg.grid.w;
+    const post = BUILD_TYPES.indexOf("post");
+    let before = false;
+    let after = false;
+    let ordered = false;
+    for (let i = 0; i < 120 && !after; i++) {
+      const o = obs[0];
+      let act = pol.act(o);
+      if (ordered && o.mask.buildType[post] === 0) after = true;
+      const c = o.mask.cell.slice(CELL_KINDS.indexOf("build") * cells, (CELL_KINDS.indexOf("build") + 1) * cells).findIndex((x) => x === 1);
+      if (!ordered && i >= 40 && c >= 0 && o.mask.buildType[post] === 1) {
+        before = true;
+        ordered = true;
+        act = { kind: "build", row: 0, cell: c, fraction: 0.5, type: post, aux: 0 } as never;
+      }
+      obs = env.step([act]).obs;
+    }
+    expect(before).toBe(true);
+    expect(after).toBe(true);
+    await expect(MultiAgentEnv.create({ maxStructures: { castillo: 1 } })).rejects.toThrow(/desconocidas/);
+  }, 120000);
 });

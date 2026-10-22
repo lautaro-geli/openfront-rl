@@ -24,7 +24,8 @@ import { GameRunner } from "@openfront/engine/GameRunner";
 import { loadMapFiles } from "@openfront/shared/GameMapLoader";
 import { actionToIntents, computeMaskInfo, type MaskInfo } from "./actions";
 import { emptyMask } from "./mask";
-import { ACTION_KINDS, KIND, type ActionKind } from "./features";
+import { ACTION_KINDS, BUILD_TYPES, KIND, type ActionKind } from "./features";
+import { BUILD_UNIT } from "./mask";
 import { countBuilt, countConqueredBy, countConquest, countIntentEvents, zeroEvents, type Events } from "./events";
 import { computeRewardParts, newRewardState, sumParts, type RewardState } from "./reward";
 import { FsMapLoader } from "./mapLoader";
@@ -48,6 +49,7 @@ export const DEFAULT_CONFIG: EnvConfig = {
   nations: "default",
   difficulty: Difficulty.Medium,
   disabledActions: [],
+  maxStructures: {},
   decisionInterval: 10,
   maxTicks: 6000,
   grid: { h: 32, w: 64 },
@@ -115,6 +117,8 @@ export class MultiAgentEnv {
   static async create(cfg: Partial<EnvConfig> = {}, mapsDir: string = DEFAULT_MAPS_DIR): Promise<MultiAgentEnv> {
     const full: EnvConfig = { ...DEFAULT_CONFIG, ...cfg, grid: { ...DEFAULT_CONFIG.grid, ...cfg.grid } };
     const unknown = full.disabledActions.filter((k) => !(ACTION_KINDS as readonly string[]).includes(k));
+    const badCap = Object.keys(full.maxStructures).filter((k) => !(BUILD_TYPES as readonly string[]).includes(k));
+    if (badCap.length > 0) throw new Error(`maxStructures desconocidas: ${badCap.join(", ")}`);
     if (unknown.length > 0) throw new Error(`disabledActions desconocidas: ${unknown.join(", ")}`);
     if (full.decisionInterval < 1) throw new Error("decisionInterval debe ser >= 1");
     if (full.maxTicks < 1) throw new Error("maxTicks debe ser >= 1");
@@ -350,6 +354,11 @@ export class MultiAgentEnv {
         : computeMaskInfo(ep.game, a.me, this.cfg.maxNeighbors, this.cfg.grid.h * this.cfg.grid.w);
       const obs = buildObservation(ep.game, a.me, ctx, a.maskInfo);
       for (const k of this.cfg.disabledActions) obs.mask.kind[KIND[k as ActionKind]] = 0;
+      for (const [name, max] of Object.entries(this.cfg.maxStructures)) {
+        const unit = BUILD_UNIT[name as (typeof BUILD_TYPES)[number]];
+        if (a.me.units(unit).filter((u) => u.isActive()).length >= max) obs.mask.buildType[BUILD_TYPES.indexOf(name as (typeof BUILD_TYPES)[number])] = 0;
+      }
+      if (!obs.mask.buildType.some((v) => v === 1)) obs.mask.kind[KIND.build] = 0;
       return obs;
     });
   }

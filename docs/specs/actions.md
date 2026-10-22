@@ -67,7 +67,9 @@ Acompaña a cada observación. Se calcula del mismo estado y se cachea hasta el 
 Los campos antiguos `spawn`, `expand` y `attackSlots` se conservan.
 
 ### 4b. Acciones desactivadas por configuración
-`EnvConfig.disabledActions` (lista de nombres de tipo, p. ej. `["embargo_start", "emoji"]`; por defecto vacía) apaga esos tipos en `mask.kind`; una acción desactivada cuenta como inválida. Sirve para quitar durante el entrenamiento lo que no aporta contra tribus: embargos (las tribus no comercian), emoji, donaciones, alianzas y marcar objetivo. `configs/ppo_base.yaml` las desactiva.
+`EnvConfig.disabledActions` (lista de nombres de tipo, p. ej. `["embargo_start", "emoji"]`; por defecto vacía) apaga esos tipos en `mask.kind`; una acción desactivada cuenta como inválida. Sirve para quitar durante el entrenamiento lo que no aporta contra tribus: embargos (las tribus no comercian), emoji, donaciones, alianzas y marcar objetivo. `configs/ppo_base.yaml` las desactiva. Tras analizar el run `Day1` también se desactivan `cancel_attack`, `cancel_boat` y `delete_unit`: el agente cancelaba casi cada desembarco que lanzaba (19–33 `cancel_boat` por 20–34 `boat_attack`), lo que le impedía cruzar el mar de Britannia (se quedaba en ~70 % o ~26 % del mapa), y borraba casi cada estructura que construía.
+
+`EnvConfig.maxStructures` (p. ej. `{post: 4}`) limita cuántas estructuras de un tipo (`city, port, factory, post, sam, silo, warship`) puede tener el agente a la vez, contando las que están en construcción: con el tope alcanzado ese tipo se apaga en `mask.build_type` y, si no queda ningún tipo construible, también `mask.kind[build]`. Por defecto no hay topes. El entrenamiento limita los puestos de defensa a 4, lo que paga la recompensa (`docs/specs/reward.md` §2); en `Day1` el agente construía 31–43 por partida.
 
 ## 5. Tests (todos contra el motor real)
 - Ninguna acción enmascarada produce un intent; una acción cuya resolución falla produce `invalidAction` y no llega al motor.
