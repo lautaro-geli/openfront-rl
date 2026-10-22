@@ -30,6 +30,7 @@ Entrenar una política (PyTorch, PPO + self-play) que juegue partidas completas 
 - Medir velocidad: `cd trainer && PYTHONPATH=. python scripts/bench.py --workers 1 5 --map World --bots 400`
 - Panel de control: `cd trainer && python -m openfront_rl.dashboard` → http://127.0.0.1:8765 (lanza, pausa, reanuda, detiene y mata entrenamientos; métricas, workers, arquitectura y metas; ADR 0008, `docs/specs/dashboard.md`)
 - Entrenar: `cd trainer && python -m openfront_rl.train --config configs/ppo_base.yaml` (crea `runs/<nombre>-<semilla>/` con config, `metrics.jsonl` y checkpoints; `--resume runs/.../latest.pt`; `--episodes 50` fija la duración en partidas, `--workers N`, `--env bots=30 --env nations=disabled --env difficulty=Easy --env map=World` cambia el escenario; un run nuevo en una carpeta con datos archiva lo anterior en `anterior-<fecha>/`)
+- Exportar un modelo (solo pesos, ADR 0009): `cd trainer && python -m openfront_rl.export --ckpt runs/<run>/latest.pt --out ../models/<nombre> --results "…" --note "…"`; cargar con `openfront_rl.export.load_policy`. Modelos guardados en `models/` (uno por escenario del currículo: `tribus-day2`, `nacion1-day3-u175`).
 
 ## Convenciones
 - Python: tipado con type hints, `ruff` + `black`, `pytest`.
@@ -39,7 +40,7 @@ Entrenar una política (PyTorch, PPO + self-play) que juegue partidas completas 
 
 ## Mapa de documentación
 - `docs/architecture.md`: visión general, diagramas y fases.
-- `docs/adr/`: decisiones de arquitectura.
+- `docs/adr/`: decisiones de arquitectura (0009: modelos en git).
 - `docs/specs/`: observaciones, acciones, recompensa, protocolo, panel (`dashboard.md`).
 - `docs/phase0-investigation.md`: prompt de la primera sesión (investigación del motor).
 

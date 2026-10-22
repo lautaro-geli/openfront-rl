@@ -17,6 +17,8 @@ runs/
 wandb/
 *.pt
 *.onnx
+# Modelos de solo pesos que sí se versionan (docs/adr/0009-modelos-en-git.md)
+!models/*.pt
 
 # Entorno y sistema
 .env

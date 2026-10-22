@@ -1,0 +1,124 @@
+{
+  "source": "runs/Day2/latest.pt (ppo_base)",
+  "update": 116,
+  "episodes_done": 50,
+  "steps": 74240,
+  "protocol_version": 3,
+  "scenario": {
+    "map": "Britannia",
+    "bots": 20,
+    "nations": "disabled",
+    "difficulty": "Easy",
+    "decisionInterval": 10,
+    "maxTicks": 18000,
+    "grid": {
+      "h": 32,
+      "w": 64
+    },
+    "samples": 4,
+    "rewardTerritoryWeight": 0.4,
+    "rewardAttackWeight": 0.08,
+    "rewardEconomyWeight": 0.04,
+    "rewardDefenseWeight": 0.05,
+    "rewardMilestonesWeight": 0.06,
+    "rewardTroopsWeight": 0.05,
+    "territoryKnee": 0.15,
+    "territoryKneeShare": 0.35,
+    "disabledActions": [
+      "alliance_request",
+      "alliance_reject",
+      "alliance_break",
+      "alliance_extend",
+      "embargo_start",
+      "embargo_stop",
+      "embargo_all_start",
+      "embargo_all_stop",
+      "target_player",
+      "emoji",
+      "donate_gold",
+      "donate_troops",
+      "cancel_attack",
+      "cancel_boat",
+      "delete_unit"
+    ],
+    "maxStructures": {
+      "post": 4
+    }
+  },
+  "config": {
+    "name": "ppo_base",
+    "seed": 0,
+    "device": "cpu",
+    "workers": null,
+    "torch_threads": null,
+    "low_priority": true,
+    "rollout_steps": 128,
+    "updates": 1000,
+    "episodes": 50,
+    "checkpoint_every": 25,
+    "eval": {
+      "every": 50,
+      "episodes": 5
+    },
+    "env": {
+      "map": "Britannia",
+      "bots": 20,
+      "nations": "disabled",
+      "difficulty": "Easy",
+      "decisionInterval": 10,
+      "maxTicks": 18000,
+      "grid": {
+        "h": 32,
+        "w": 64
+      },
+      "samples": 4,
+      "rewardTerritoryWeight": 0.4,
+      "rewardAttackWeight": 0.08,
+      "rewardEconomyWeight": 0.04,
+      "rewardDefenseWeight": 0.05,
+      "rewardMilestonesWeight": 0.06,
+      "rewardTroopsWeight": 0.05,
+      "territoryKnee": 0.15,
+      "territoryKneeShare": 0.35,
+      "disabledActions": [
+        "alliance_request",
+        "alliance_reject",
+        "alliance_break",
+        "alliance_extend",
+        "embargo_start",
+        "embargo_stop",
+        "embargo_all_start",
+        "embargo_all_stop",
+        "target_player",
+        "emoji",
+        "donate_gold",
+        "donate_troops",
+        "cancel_attack",
+        "cancel_boat",
+        "delete_unit"
+      ],
+      "maxStructures": {
+        "post": 4
+      }
+    },
+    "conquest": {
+      "budget": 0.2,
+      "until": 0.5
+    },
+    "model": {},
+    "ppo": {
+      "gamma": 0.997,
+      "gae_lambda": 0.95,
+      "clip": 0.2,
+      "epochs": 3,
+      "minibatch": 128,
+      "lr": 0.0003,
+      "ent_coef": 0.01,
+      "ent_coef_final": 0.001
+    }
+  },
+  "results": "Contra 20 tribus Easy, sin naciones, Britannia: 24 victorias en 50 partidas de entrenamiento (16/21 en las últimas 21; ~86 % en las últimas actualizaciones, con acciones muestreadas). Con 1 nación Easy sin reentrenar: 1/5 victorias.",
+  "note": "Mejor agente medido contra tribus. Currículo etapa 1.",
+  "exported": "2026-10-22",
+  "size_bytes": 13509323
+}
