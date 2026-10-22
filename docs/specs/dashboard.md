@@ -53,7 +53,7 @@ Cada worker acumula, desde que empezó el run (se guardan en `workers.json` y se
 `stats = {games, wins, eliminated, avg_max_territory, avg_final_territory, avg_length, conquered_by_tribe, conquered_by_nation, tribes_conquered, nations_conquered, built: {city, port, factory, post, sam, silo, warship}, nukes_launched, recent: [...]}`.
 - `avg_max_territory`: promedio, entre partidas, del mayor `land_share` alcanzado durante la partida; `avg_final_territory`: promedio del `land_share` al terminar. Ambos en fracción del mapa (0–1).
 - `conquered_by_*`: veces que el agente fue eliminado porque una tribu o una nación tomó su último territorio (la eliminación por otras causas cuenta en `eliminated` pero no aquí). `*_conquered`: veces que el agente eliminó a una tribu o una nación.
-- `built`: total de estructuras colocadas por el agente en las partidas terminadas del worker (por tipo); `recent`: las últimas 10 partidas `{n, built: {...}, nukes_launched, result: "victoria"|"eliminado"|"tiempo", max_territory, final_territory, ticks, tribes_conquered, nations_conquered, conquered_by: "tribu"|"nación"|null}`.
+- `built`: total de estructuras colocadas por el agente en las partidas terminadas del worker (por tipo); `result` es `victoria`, `eliminado`, `tiempo` (se acabaron los ticks) o `ganó otro` (otro jugador llegó al 80 % antes, p. ej. una nación); `recent`: las últimas 10 partidas `{n, built: {...}, nukes_launched, result: "victoria"|"eliminado"|"tiempo", max_territory, final_territory, ticks, tribes_conquered, nations_conquered, conquered_by: "tribu"|"nación"|null}`.
 En la pantalla Run, cada worker muestra el resumen y al hacer clic se expande con el detalle, las últimas partidas y su propio registro.
 
 ## 6. CPU y prioridad

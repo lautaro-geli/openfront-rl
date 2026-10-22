@@ -27,7 +27,7 @@ class WorkerStats:
                 "conquered_by_tribe": 0, "conquered_by_nation": 0, "tribes_conquered": 0, "nations_conquered": 0,
                 "built": {k: 0 for k in BUILT}, "nukes_launched": 0, "recent": []}
 
-    def end_game(self, i: int, *, won: bool, eliminated: bool, max_territory: float, final_territory: float, ticks: int,
+    def end_game(self, i: int, *, won: bool, eliminated: bool, truncated: bool = True, max_territory: float, final_territory: float, ticks: int,
                  events: dict[str, float]) -> dict[str, Any]:
         """Anota una partida terminada y devuelve su resumen (el que va al registro)."""
         s = self.w[i]
@@ -44,7 +44,7 @@ class WorkerStats:
             s["built"][k] += v
         s["nukes_launched"] += int(events.get("nukes_launched", 0))
         by = "tribu" if events.get("conquered_by_tribe", 0) else "nación" if events.get("conquered_by_nation", 0) else None
-        game = {"n": s["games"], "result": "victoria" if won else "eliminado" if eliminated else "tiempo",
+        game = {"n": s["games"], "result": "victoria" if won else "eliminado" if eliminated else "tiempo" if truncated else "ganó otro",
                 "max_territory": round(max_territory, 4), "final_territory": round(final_territory, 4), "ticks": ticks,
                 "tribes_conquered": int(events.get("tribes_conquered", 0)), "nations_conquered": int(events.get("nations_conquered", 0)),
                 "conquered_by": by, "built": built, "nukes_launched": int(events.get("nukes_launched", 0))}

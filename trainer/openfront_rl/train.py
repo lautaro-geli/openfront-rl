@@ -156,7 +156,7 @@ class Runner:
                         **{f"ev_{k}": v for k, v in zip(self.m.event_names, self.ep_events[i].tolist())},
                         "max_territory": float(self.ep_max[i]), "final_territory": share,
                     })
-                    g = self.wstats.end_game(i, won=bool(fin.won[0]), eliminated=bool(fin.eliminated[0]), max_territory=float(self.ep_max[i]),
+                    g = self.wstats.end_game(i, won=bool(fin.won[0]), eliminated=bool(fin.eliminated[0]), truncated=bool(fin.truncated), max_territory=float(self.ep_max[i]),
                                              final_territory=share, ticks=int(fin.tick),
                                              events=dict(zip(self.m.event_names, self.ep_events[i].tolist())))
                     if self.wlogs is not None:

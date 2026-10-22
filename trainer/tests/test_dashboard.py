@@ -220,3 +220,11 @@ def test_recompensas_editables_se_validan_y_se_pasan_a_train(panel):
             panel.reward_args(bad)
     from openfront_rl.train import parse_env
     assert parse_env(["rewardAttackWeight=0.12"]) == {"rewardAttackWeight": 0.12}
+
+
+def test_resultado_distingue_tiempo_y_victoria_de_otro():
+    from openfront_rl.workers import WorkerStats
+    ws = WorkerStats(1)
+    kw = dict(won=False, eliminated=False, max_territory=0.1, final_territory=0.1, ticks=100, events={})
+    assert ws.end_game(0, truncated=True, **kw)["result"] == "tiempo"
+    assert ws.end_game(0, truncated=False, **kw)["result"] == "ganó otro"

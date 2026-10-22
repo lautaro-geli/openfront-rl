@@ -1,0 +1,47 @@
+# Etapa 2 del currículo: igual que ppo_base pero con 1 nación Easy además de las 20 tribus. Se reanuda desde un run de ppo_base
+# (--resume). Medido con el checkpoint de Day2 (sin reentrenar): con 3 naciones Easy 0/4 victorias y 3 eliminaciones; con 1 nación 1/5.
+name: ppo_naciones
+seed: 0
+device: cpu
+workers: null          # null = núcleos − 1 (5 en un i5-9400)
+rollout_steps: 128     # 128 pasos × 5 partidas = 640 muestras por actualización
+updates: 1000
+episodes: 150         # duración del run en partidas de entrenamiento terminadas (anula `updates`)
+checkpoint_every: 25
+eval:
+  every: 50
+  episodes: 5
+env:
+  map: Britannia
+  bots: 20
+  nations: 1
+  difficulty: Easy
+  decisionInterval: 10
+  maxTicks: 18000
+  grid: {h: 32, w: 64}
+  samples: 4
+  rewardTerritoryWeight: 0.40
+  rewardAttackWeight: 0.08
+  rewardEconomyWeight: 0.04
+  rewardDefenseWeight: 0.05
+  rewardMilestonesWeight: 0.06   # primera ciudad, puerto y fábrica (reward.md §2b)
+  rewardTroopsWeight: 0.05       # tropas en la zona justa, ~42 % del máximo (reward.md §2c)
+  territoryKnee: 0.15            # el primer 15 % del mapa paga el 35 % del presupuesto de territorio (reward.md §2)
+  territoryKneeShare: 0.35
+  # Sin diplomacia ni comercio: contra tribus no aportan (docs/specs/actions.md §4b).
+  disabledActions: [alliance_request, alliance_reject, alliance_break, alliance_extend, embargo_start, embargo_stop,
+                    embargo_all_start, embargo_all_stop, target_player, emoji, donate_gold, donate_troops,
+                    cancel_attack, cancel_boat, delete_unit]
+  maxStructures: {post: 4}       # los puestos de defensa solo pagan hasta 4 (reward.md §2)
+# Bonus por tribu conquistada: máximo al empezar y 0 a partir del 50 % del run (docs/specs/reward.md §9).
+conquest: {budget: 0.20, until: 0.5}
+model: {}
+ppo:
+  gamma: 0.997
+  gae_lambda: 0.95
+  clip: 0.2
+  epochs: 3
+  minibatch: 128
+  lr: 0.0003
+  ent_coef: 0.01
+  ent_coef_final: 0.001
