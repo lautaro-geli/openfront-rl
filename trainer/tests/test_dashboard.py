@@ -228,3 +228,13 @@ def test_resultado_distingue_tiempo_y_victoria_de_otro():
     kw = dict(won=False, eliminated=False, max_territory=0.1, final_territory=0.1, ticks=100, events={})
     assert ws.end_game(0, truncated=True, **kw)["result"] == "tiempo"
     assert ws.end_game(0, truncated=False, **kw)["result"] == "ganó otro"
+
+
+def test_misiles_registran_a_quien_apuntan():
+    from openfront_rl.workers import WorkerStats, game_line
+    ws = WorkerStats(1)
+    g = ws.end_game(0, won=True, eliminated=False, max_territory=0.8, final_territory=0.8, ticks=100,
+                    events={"nukes_launched": 3, "nuke_at_tribe": 1, "nuke_at_nation": 1, "nuke_at_nobody": 1})
+    s = ws.summary(0)
+    assert s["nukes_at"] == {"tribe": 1, "nation": 1, "nobody": 1}
+    assert "3 misiles (1 a tribus, 1 a naciones, 1 a tierra libre)" in game_line(g)

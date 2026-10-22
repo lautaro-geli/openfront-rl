@@ -169,7 +169,7 @@ async function viewRun(m) {
   const stat = (k, v) => h("div", {class: "stat"}, h("div", {class: "v"}, v), h("div", {class: "k"}, k));
   const wbtn = w => h("button", {class: "b", style: "margin-top:6px", onclick: async ev => { ev.stopPropagation(); try { await api(`/runs/${run}/workers`, {worker: w.i, paused: !w.paused}); } catch (e) { alert(e.message); } render(); }}, w.paused ? "Reanudar worker" : "Pausar worker");
   const BL = {city: "ciudades", port: "puertos", factory: "fábricas", post: "puestos de defensa", sam: "SAM", silo: "silos", warship: "barcos de guerra"};
-  const builtText = g => { const p = Object.entries(g.built || {}).filter(([, v]) => v).map(([k, v]) => `${v} ${BL[k]}`); if (g.nukes_launched) p.push(`${g.nukes_launched} misiles`); return p.join(", ") || "nada"; };
+  const builtText = g => { const p = Object.entries(g.built || {}).filter(([, v]) => v).map(([k, v]) => `${v} ${BL[k]}`); if (g.nukes_launched) { const NA = {tribe: "tribus", nation: "naciones", nobody: "tierra libre"}; const at = Object.entries(g.nukes_at || {}).filter(([, v]) => v).map(([k, v]) => `${v} a ${NA[k]}`).join(", "); p.push(`${g.nukes_launched} misiles` + (at ? ` (${at})` : "")); } return p.join(", ") || "nada"; };
   const scenario = c => { const e = (c || {}).env || {}; const n = e.nations ?? "default"; return `${e.map || "?"} · ${e.bots ?? "?"} tribus · ${n === "disabled" ? "sin naciones" : (typeof n === "number" ? n + " naciones" : "naciones del mapa")} · nivel ${e.difficulty || "?"}`; };
   const pc = x => x == null ? "–" : (100 * x).toFixed(1) + " %";
   const wlogs = {};
@@ -189,7 +189,7 @@ async function viewRun(m) {
           stat("  · una tribu", fmt(t.conquered_by_tribe, 0)), stat("  · una nación", fmt(t.conquered_by_nation, 0)),
           stat("Conquistó", fmt((t.tribes_conquered || 0) + (t.nations_conquered || 0), 0)),
           stat("  · tribus", fmt(t.tribes_conquered, 0)), stat("  · naciones", fmt(t.nations_conquered, 0)),
-          Object.keys(BL).map(k => stat("Construyó · " + BL[k], fmt((t.built || {})[k], 0))), stat("Misiles lanzados", fmt(t.nukes_launched, 0)),
+          Object.keys(BL).map(k => stat("Construyó · " + BL[k], fmt((t.built || {})[k], 0))), stat("Misiles lanzados", fmt(t.nukes_launched, 0)), stat("  · a tribus", fmt((t.nukes_at || {}).tribe, 0)), stat("  · a naciones", fmt((t.nukes_at || {}).nation, 0)), stat("  · a tierra libre", fmt((t.nukes_at || {}).nobody, 0)),
           stat("Victorias", fmt(t.wins, 0)), stat("Eliminado", fmt(t.eliminated, 0)), stat("Duración media (ticks)", fmt(t.avg_length, 0))),
         h("h2", {style: "margin-top:12px"}, "Últimas partidas"),
         recent.length ? h("div", {class: "scroll"}, h("table", {}, h("thead", {}, h("tr", {}, ["N.º", "Resultado", "Terr. máx.", "Terr. final", "Ticks", "Tribus", "Naciones", "Lo conquistó", "Construyó"].map(x => h("th", {}, x)))), h("tbody", {}, recent))) : h("span", {class: "muted"}, "todavía no terminó ninguna partida"),

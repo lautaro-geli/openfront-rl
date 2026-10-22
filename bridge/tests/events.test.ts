@@ -16,11 +16,13 @@ describe("eventos del paso", () => {
     expect(tribe).toBeDefined();
     const ev = zeroEvents();
     const c = "rl-agent-0";
+    const tribeTile = tribe!.tiles().values().next().value as number;
     countIntentEvents(
       g,
       [
         { type: "build_unit", unit: UnitType.AtomBomb, tile: 0, clientID: c },
         { type: "build_unit", unit: UnitType.MIRV, tile: 0, clientID: c },
+        { type: "build_unit", unit: UnitType.HydrogenBomb, tile: tribeTile, clientID: c },
         { type: "build_unit", unit: UnitType.City, tile: 0, clientID: c },
         { type: "attack", targetID: null, troops: 10, clientID: c },
         { type: "attack", targetID: tribe!.id(), troops: 10, clientID: c },
@@ -28,7 +30,7 @@ describe("eventos del paso", () => {
       ] as never,
       ev,
     );
-    expect(ev).toMatchObject({ nuke_orders: 2, build_orders: 1, expand_orders: 1, attack_orders: 1, attack_tribe_orders: 1, boat_orders: 1 });
+    expect(ev).toMatchObject({ nuke_orders: 3, nuke_at_tribe: 1, nuke_at_nobody: 2, nuke_at_nation: 0, build_orders: 1, expand_orders: 1, attack_orders: 1, attack_tribe_orders: 1, boat_orders: 1 });
   }, 60000);
 
   it("la heurística ordena ataques y los eventos son enteros coherentes", async () => {

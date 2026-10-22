@@ -23,6 +23,9 @@ export const EVENT_NAMES = [
   "built_silo",
   "built_warship",
   "nukes_launched",
+  "nuke_at_tribe",
+  "nuke_at_nation",
+  "nuke_at_nobody",
 ] as const;
 export type Events = Record<(typeof EVENT_NAMES)[number], number>;
 
@@ -45,6 +48,9 @@ export const zeroEvents = (): Events => ({
   built_silo: 0,
   built_warship: 0,
   nukes_launched: 0,
+  nuke_at_tribe: 0,
+  nuke_at_nation: 0,
+  nuke_at_nobody: 0,
 });
 
 const NUKE_UNITS = new Set<unknown>(Object.values(NUKE_UNIT));
@@ -66,8 +72,13 @@ export function countIntentEvents(game: Game, intents: StampedIntent[], ev: Even
         ev.boat_orders++;
         break;
       case "build_unit":
-        if (NUKE_UNITS.has(it.unit)) ev.nuke_orders++;
-        else ev.build_orders++;
+        if (NUKE_UNITS.has(it.unit)) {
+          ev.nuke_orders++;
+          const owner = game.owner(it.tile);
+          if (!owner.isPlayer()) ev.nuke_at_nobody++;
+          else if (owner.type() === PlayerType.Bot) ev.nuke_at_tribe++;
+          else if (owner.type() === PlayerType.Nation) ev.nuke_at_nation++;
+        } else ev.build_orders++;
         break;
     }
   }
