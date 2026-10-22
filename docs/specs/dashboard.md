@@ -26,7 +26,7 @@
 goals:
   - {id: first_tribe_attack, title: "Primer ataque a una tribu", metric: ep_ev_attack_tribe_orders, op: ">", value: 0}
 ```
-`metric` es una columna de `metrics.jsonl`; el avance es el máximo histórico del run (para `<`, el mínimo). Una meta está cumplida cuando `op`/`value` se cumplen con ese valor. Las metas son del agente, no del run: sirven para ver en qué etapa va.
+`metric` es una columna de `metrics.jsonl`; el avance es el máximo histórico del run (para `<`, el mínimo). Una meta está cumplida cuando `op`/`value` se cumplen con ese valor. Con `window: N` la meta es sostenida: se usa la media móvil de las últimas N filas con datos (≈ N partidas) y cuenta la mejor ventana del run. Las metas son del agente, no del run: sirven para ver en qué etapa va.
 
 ## 4. Pantallas
 1. **Procesos**: tabla de runs (estado, actualización/total, pasos/s, CPU, memoria) con botones Pausar, Reanudar, Detener, Matar; formulario para lanzar (config, nombre, semilla, workers, actualizaciones).

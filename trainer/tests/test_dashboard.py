@@ -118,6 +118,19 @@ def test_metas_se_evaluan_contra_metrics(panel):
     assert g["g2"]["done"] and g["g2"]["best"] == 0.0
 
 
+def test_meta_sostenida_usa_media_movil(panel, tmp_path):
+    d = panel.runs_dir / "m2"
+    d.mkdir()
+    rows = [{"update": i, "ep_won": v} for i, v in enumerate([1, 1, 0, 0, 1, 1, 1])]
+    (d / "metrics.jsonl").write_text("\n".join(json.dumps(r) for r in rows), encoding="utf8")
+    (panel.configs_dir / "goals.yaml").write_text(yaml.safe_dump({"goals": [
+        {"id": "w", "title": "t", "metric": "ep_won", "op": ">=", "value": 0.75, "window": 3},
+        {"id": "x", "title": "t", "metric": "ep_won", "op": ">=", "value": 0.8, "window": 4}]}), encoding="utf8")
+    g = {x["id"]: x for x in panel.goals("m2")}
+    assert g["w"]["done"] and abs(g["w"]["best"] - 1.0) < 1e-9  # ventana 1,1,1
+    assert not g["x"]["done"] and abs(g["x"]["best"] - 0.75) < 1e-9
+
+
 def test_pausar_y_reanudar_un_worker(panel):
     assert call(panel, "/api/runs", {"config": "duo.yaml", "name": "w1", "episodes": 500})[0] == 201
 

@@ -11,3 +11,11 @@ goals:
   - {id: territory_10, title: "10 % del mapa (territorio)", metric: ep_part_territory, op: ">=", value: 0.05}
   - {id: territory_half, title: "Mitad del camino al 80 % (territorio)", metric: ep_part_territory, op: ">=", value: 0.2}
   - {id: win, title: "Ganar una partida", metric: ep_won, op: ">", value: 0}
+  # Metas de calidad (nivel 2): `window: N` = media móvil de las últimas N filas con episodios (~N partidas); cuenta la mejor ventana.
+  - {id: first_port, title: "Construir un puerto", metric: ep_ev_built_port, op: ">", value: 0}
+  - {id: nuke_at_tribe, title: "Misil lanzado a una tribu", metric: ep_ev_nuke_at_tribe, op: ">", value: 0}
+  - {id: nuke_at_nation, title: "Misil lanzado a una nación", metric: ep_ev_nuke_at_nation, op: ">", value: 0}
+  - {id: nukes_regular, title: "Misiles habituales (≥1 por partida, media de 30)", metric: ep_ev_nukes_launched, op: ">=", value: 1, window: 30}
+  - {id: nation_half, title: "Conquistar la nación en la mitad de las partidas (30)", metric: ep_ev_nations_conquered, op: ">=", value: 0.5, window: 30}
+  - {id: no_elimination_30, title: "0 eliminaciones en 30 partidas", metric: ep_eliminated, op: "<=", value: 0, window: 30}
+  - {id: win_rate_60, title: "Ganar ≥60 % de las partidas (30 seguidas)", metric: ep_won, op: ">=", value: 0.6, window: 30}

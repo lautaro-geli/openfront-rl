@@ -245,6 +245,9 @@ class Panel:
         out = []
         for g in spec.get("goals", []):
             vals = [r[g["metric"]] for r in rows if isinstance(r.get(g["metric"]), (int, float))]
+            w = int(g.get("window", 0))
+            if w > 0:  # meta sostenida: media móvil de las últimas w filas con datos; el avance es la mejor ventana
+                vals = [sum(vals[i - w:i]) / w for i in range(w, len(vals) + 1)]
             lower = g["op"] in ("<", "<=")
             best = (min(vals) if lower else max(vals)) if vals else None
             ok = best is not None and {">": best > g["value"], ">=": best >= g["value"], "<": best < g["value"], "<=": best <= g["value"]}[g["op"]]

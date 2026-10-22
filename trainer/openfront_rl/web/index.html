@@ -234,10 +234,10 @@ async function viewArq(m) {
 async function viewMetas(m) {
   if (!run) { m.replaceChildren(h("div", {class: "card muted"}, "Elegí un run en Procesos.")); return; }
   const gs = await api(`/runs/${run}/goals`), done = gs.filter(g => g.done).length;
-  const prog = g => g.done ? 100 : g.best == null ? 0 : (g.op === ">=" || g.op === ">") && g.value > 0 ? Math.max(0, Math.min(100, 100 * g.best / g.value)) : 0;
+  const prog = g => g.done ? 100 : g.best == null ? 0 : (g.op === ">=" || g.op === ">") && g.value > 0 ? Math.max(0, Math.min(100, 100 * g.best / g.value)) : (g.op === "<" || g.op === "<=") && g.best != null ? Math.max(0, Math.min(100, 100 * (1 - g.best))) : 0;
   m.replaceChildren(h("div", {class: "card"}, h("h2", {}, `Metas del agente · ${done} de ${gs.length}`),
     gs.map(g => h("div", {class: "goal"}, h("span", {style: "font-size:18px;color:" + (g.done ? css("--ok") : css("--mut"))}, g.done ? "✔" : "○"),
-      h("div", {class: "t"}, g.title, h("small", {}, `${g.metric} ${g.op} ${g.value} · mejor: ${fmt(g.best, 3)}`)), h("div", {class: "bar"}, h("i", {style: `width:${prog(g)}%;background:${g.done ? css("--ok") : css("--acc")}`}))))));
+      h("div", {class: "t"}, g.title, h("small", {}, `${g.metric}${g.window ? ` (media de ${g.window})` : ""} ${g.op} ${g.value} · mejor: ${fmt(g.best, 3)}`)), h("div", {class: "bar"}, h("i", {style: `width:${prog(g)}%;background:${g.done ? css("--ok") : css("--acc")}`}))))));
 }
 
 async function render() {
