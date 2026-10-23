@@ -39,3 +39,8 @@ Opción 4:
 - Métricas por rollout: `samples`, `t_net` (red), `t_env` (en async: tiempo del hilo principal esperando a los workers) y `worker_util` (tiempo ocupado de los workers / tiempo de pared × workers; en sync, Σ media / Σ máximo por paso).
 - Medición en el sandbox (2 workers, 2 núcleos, red en CPU): sin ganancia (la red atiende lotes de 1 y compite por CPU con los motores). No es representativa de la PC del usuario (GPU, 5–6 núcleos); la decisión se toma con el run real.
 - El run `v5_ppo_prueba` cambia varias cosas a la vez (3 workers, async, evaluación de 20, `lr_floor` 0,3): sirve para ver si el conjunto funciona, no para atribuir efectos.
+
+## Resultado del run de prueba (Day6, `v5_ppo_prueba`, 4 workers, nación Medium)
+- Funciona sin errores (≈849 muestras por actualización, columnas contiguas, GAE por columna), pero **no es más rápido**: 76–85 pasos/s en total frente a ~90 del sincrónico con GPU y 5 workers (Day5).
+- Del rollout (8,7 s) 8,07 s son de red y 0,55 s de espera del motor; `worker_util` = 48 %. El hilo principal atiende lotes de 1–2 workers y es el límite (techo ≈ 106 pasos/s con T·N = 856). Por worker rinde ~15 % más (21 contra 18 pasos/s) y gasta menos CPU.
+- Decisión: se mantiene `sync` por defecto y el asíncrono queda como opción experimental. Si se retoma, probar agrupar a los workers listos esperando unos ms para llenar el lote.

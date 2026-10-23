@@ -1,0 +1,52 @@
+# v6 (Day7): vuelve a 1 nación Easy con rollout sincrónico y 4 workers, desde Day5/latest.pt (partida 289; `episodes` es el total absoluto: 439 = 150 nuevas).
+# Day6 (v5, nación Medium + asíncrono) dejó el crítico dañado (expl_var −0,85) y 3 % de victorias; no se continúa desde ahí.
+# Mantiene lo de Day5/v5: value_clip 100, vf_coef 1.0, lr_floor 0,3 y evaluación de 20 partidas cada 100 actualizaciones.
+name: ppo_v6
+seed: 0
+device: auto          # auto = GPU (CUDA) si existe, si no CPU; cpu o cuda para forzar
+workers: 4          # 4 de los 6 núcleos: deja la PC usable
+rollout_steps: 160     # 4 workers × 160 = 640 muestras por actualización (como 5 × 128 en Day5)
+updates: 1000
+rollout_mode: sync    # el asíncrono no ganó velocidad (Day6, ADR 0010): la red serializada era el límite
+episodes: 439         # duración del run en partidas de entrenamiento terminadas (anula `updates`)
+checkpoint_every: 25
+eval:
+  every: 100        # actualizaciones (~48 partidas)
+  episodes: 20
+env:
+  map: Britannia
+  bots: 20
+  nations: 1
+  difficulty: Easy
+  decisionInterval: 10
+  maxTicks: 18000
+  grid: {h: 32, w: 64}
+  samples: 4
+  rewardTerritoryWeight: 0.40
+  rewardAttackWeight: 0.08
+  rewardEconomyWeight: 0.04
+  rewardDefenseWeight: 0.05
+  rewardMilestonesWeight: 0.06   # primera ciudad, puerto y fábrica (reward.md §2b)
+  rewardTroopsWeight: 0.05       # tropas en la zona justa, ~42 % del máximo (reward.md §2c)
+  territoryKnee: 0.15            # el primer 15 % del mapa paga el 35 % del presupuesto de territorio (reward.md §2)
+  territoryKneeShare: 0.35
+  # Sin diplomacia ni comercio: contra tribus no aportan (docs/specs/actions.md §4b).
+  disabledActions: [alliance_request, alliance_reject, alliance_break, alliance_extend, embargo_start, embargo_stop,
+                    embargo_all_start, embargo_all_stop, target_player, emoji, donate_gold, donate_troops,
+                    cancel_attack, cancel_boat, delete_unit]
+  maxStructures: {post: 4}       # los puestos de defensa solo pagan hasta 4 (reward.md §2)
+# Bonus por tribu conquistada: máximo al empezar y 0 a partir del 50 % del run (docs/specs/reward.md §9).
+conquest: {budget: 0.20, until: 0.5}
+model: {}
+ppo:
+  gamma: 0.997
+  gae_lambda: 0.95
+  clip: 0.2
+  epochs: 3
+  minibatch: 128
+  lr: 0.00015       # decae con el progreso (episodes_done/episodes): empezando en 289/439 queda ~5e-5 y baja hasta 4,5e-5 (lr_floor)
+  ent_coef: 0.01
+  ent_coef_final: 0.001
+  value_clip: 100.0   # Day4 usaba 0.2 (por defecto): el crítico no podía alcanzar retornos de ~4–14 en la escala de recompensa
+  vf_coef: 1.0
+  lr_floor: 0.3       # Day4/Day5: el lr caía hasta 0,1·lr y el expl_var se hundía al final (hipótesis)
