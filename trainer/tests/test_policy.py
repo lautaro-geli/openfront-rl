@@ -163,3 +163,12 @@ def test_entrenamiento_por_partidas_termina_y_lo_guarda(tmp_path):
     assert sum(w["games"] for w in ws) == rows[-1]["episodes_done"]  # cada partida terminada se anota en su worker
     assert all(0 <= w["sum_max"] / max(1, w["games"]) <= 1 for w in ws)
     assert any("partida 1:" in x.read_text() for x in (run / "workers").glob("worker-*.log"))
+
+
+def test_resolve_device():
+    from openfront_rl.train import resolve_device
+    assert resolve_device("cpu").type == "cpu"
+    assert resolve_device("auto").type == ("cuda" if torch.cuda.is_available() else "cpu")
+    if not torch.cuda.is_available():
+        with pytest.raises(RuntimeError, match="GPU"):
+            resolve_device("cuda")

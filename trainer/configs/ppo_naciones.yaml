@@ -2,7 +2,7 @@
 # (--resume). Medido con el checkpoint de Day2 (sin reentrenar): con 3 naciones Easy 0/4 victorias y 3 eliminaciones; con 1 nación 1/5.
 name: ppo_naciones
 seed: 0
-device: cpu
+device: auto          # auto = GPU (CUDA) si existe, si no CPU; cpu o cuda para forzar
 workers: null          # null = núcleos − 1 (5 en un i5-9400)
 rollout_steps: 128     # 128 pasos × 5 partidas = 640 muestras por actualización
 updates: 1000

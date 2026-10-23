@@ -30,7 +30,7 @@ from .workers import WorkerLogs, WorkerStats, game_line
 DEFAULTS: dict[str, Any] = {
     "name": "ppo",
     "seed": 0,
-    "device": "cpu",
+    "device": "auto",  # auto = CUDA si hay GPU, si no CPU
     "workers": None,  # None = núcleos − 1
     "torch_threads": None,  # None = núcleos físicos − 2 (mín. 1): deja dos núcleos libres a la PC
     "low_priority": True,  # entrenamiento y procesos Node con prioridad por debajo de lo normal: la PC sigue usable
@@ -206,10 +206,19 @@ def evaluate(policy: Policy, env_cfg: dict[str, Any], workers: int, episodes: in
     return {f"eval_{k}": float(np.mean([d[k] for d in done])) for k in keys} | {"eval_episodes": float(len(done))}
 
 
+def resolve_device(name: str) -> torch.device:
+    """`auto` usa la GPU (CUDA) si existe y, si no, la CPU; `cuda` sin GPU falla con un mensaje claro."""
+    if name == "auto":
+        return torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    if name.startswith("cuda") and not torch.cuda.is_available():
+        raise RuntimeError("device=cuda pero PyTorch no ve ninguna GPU (¿versión solo CPU?). Usa device: cpu o instala PyTorch con CUDA.")
+    return torch.device(name)
+
+
 def save_checkpoint(path: Path, policy: Policy, opt: torch.optim.Optimizer, update: int, cfg: dict[str, Any],
                     manifest: Manifest, rstd: RunningStd, steps: int, episodes_done: int = 0) -> None:
     torch.save({
-        "model": policy.state_dict(), "optimizer": opt.state_dict(), "update": update, "steps": steps, "episodes_done": episodes_done, "config": cfg,
+        "model": {k: v.cpu() for k, v in policy.state_dict().items()}, "optimizer": opt.state_dict(), "update": update, "steps": steps, "episodes_done": episodes_done, "config": cfg,
         "protocol_version": manifest.raw["version"], "reward_std": rstd.state(),
         "torch_version": torch.__version__, "rng": {"torch": torch.get_rng_state()},
     }, path)
@@ -270,7 +279,7 @@ def train(cfg: dict[str, Any], run_dir: str | Path | None = None, resume: str | 
     apply_resources(cfg)
     torch.manual_seed(seed)
     rng = np.random.default_rng(seed)
-    device = torch.device(cfg["device"])
+    device = resolve_device(str(cfg["device"]))
     run = Path(run_dir or f"runs/{cfg['name']}-{seed}")
     run.mkdir(parents=True, exist_ok=True)
     if resume is None:
@@ -304,7 +313,8 @@ def train(cfg: dict[str, Any], run_dir: str | Path | None = None, resume: str | 
         runctl.write_json(run / "control.json", {"command": "run"})
         if log:
             print(f"escenario: {scenario_text(cfg['env'])}", flush=True)
-            print(f"run={run} workers={workers} params={n_params:,} T={T} protocolo=v{m.raw['version']}", flush=True)
+            print(f"run={run} workers={workers} params={n_params:,} T={T} protocolo=v{m.raw['version']} dispositivo={device}"
+                  + (f" ({torch.cuda.get_device_name(device)})" if device.type == "cuda" else ""), flush=True)
         total = int(cfg["updates"])
         goal = int(cfg["episodes"]) if cfg.get("episodes") else None  # duración en partidas (docs/specs/dashboard.md §5)
         t0 = time.time()
