@@ -20,6 +20,7 @@ class PPOConfig:
     epochs: int = 3
     minibatch: int = 128
     lr: float = 3e-4
+    lr_floor: float = 0.1  # el lr nunca baja de lr × lr_floor al decaer con el progreso
     max_grad_norm: float = 0.5
     vf_coef: float = 0.5
     ent_coef: float = 0.01
@@ -79,6 +80,7 @@ class RolloutBuffer:
         self.adv = np.zeros((T, N), np.float32)
         self.ret = np.zeros((T, N), np.float32)
         self.valid = np.ones((T, N), bool)  # False = el worker estaba pausado: esas muestras no se usan
+        self.lengths = np.full(N, T)  # pasos reales de cada columna (en el rollout asíncrono varían; el resto del buffer no se usa)
 
     def add_obs(self, t: int, obs: dict[str, np.ndarray], mask: dict[str, np.ndarray]) -> None:
         for k in OBS_KEYS:
@@ -86,16 +88,18 @@ class RolloutBuffer:
         for k in MASK_KEYS:
             self.mask[k][t] = mask[k]
 
-    def compute_gae(self, last_value: np.ndarray, gamma: float, lam: float, reward_scale: float) -> None:
+    def compute_gae(self, last_value: np.ndarray, gamma: float, lam: float, reward_scale: float, use_lengths: bool = False) -> None:
+        """GAE hacia atrás. Con `use_lengths`, cada columna i termina en `lengths[i]` y se hace bootstrap con `last_value[i]`."""
         r = self.reward / reward_scale
         boot = self.boot / 1.0
+        L = self.lengths if use_lengths else np.full(self.N, self.T)
         last = np.zeros(self.N, np.float32)
         for t in reversed(range(self.T)):
-            nxt = last_value if t == self.T - 1 else self.value[t + 1]
+            nxt = np.where(L - 1 == t, last_value, self.value[min(t + 1, self.T - 1)])
             cont = 1.0 - self.done[t]
             nv = np.where(self.done[t] > 0, boot[t], nxt)
             delta = r[t] + gamma * nv - self.value[t]
-            last = delta + gamma * lam * cont * last
+            last = np.where(t < L, delta + gamma * lam * cont * last, 0.0).astype(np.float32)
             self.adv[t] = last
         self.ret = self.adv + self.value
 

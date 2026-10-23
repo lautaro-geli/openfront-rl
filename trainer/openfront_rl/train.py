@@ -10,7 +10,9 @@ from __future__ import annotations
 import argparse
 import copy
 import json
+import queue
 import time
+from concurrent.futures import ThreadPoolExecutor
 from collections import defaultdict
 from pathlib import Path
 from typing import Any
@@ -20,6 +22,7 @@ import psutil
 import torch
 import yaml
 
+from .client import Result
 from .manifest import Manifest
 from .model import MASK_KEYS, OBS_KEYS, ModelConfig, Policy, to_tensors
 from . import runctl
@@ -36,6 +39,8 @@ DEFAULTS: dict[str, Any] = {
     "low_priority": True,  # entrenamiento y procesos Node con prioridad por debajo de lo normal: la PC sigue usable
     "rollout_steps": 128,
     "updates": 1000,  # límite en actualizaciones; se ignora si `episodes` está definido
+    "rollout_mode": "sync",  # sync = todos los workers al mismo paso; async = cada uno a su ritmo (docs/adr/0010)
+    "rollout_cap": 2,  # async: tope de pasos por worker = rollout_cap × rollout_steps
     "episodes": None,  # duración del run en partidas de entrenamiento terminadas (None = usar `updates`)
     "checkpoint_every": 25,
     "eval": {"every": 50, "episodes": 5},
@@ -139,49 +144,152 @@ class Runner:
                 self.timing["busy"] += sum(lat) / len(lat)
                 self.timing["max"] += max(lat)
             for i in range(n):
-                if not act_mask[i]:
-                    continue
-                fin = self.vec.final[i]
-                r = fin if fin is not None else results[i]
-                bonus = self.conquest_w * float(r.events[0][self.tribes_idx])
-                buf.reward[t, i] = r.reward[0] + bonus
-                self.ep_conquest[i] += bonus
-                self.ep_parts[i] += r.reward_parts[0]
-                self.ep_events[i] += r.events[0]
-                self.ep_len[i] += 1
-                share = float(r.obs["globals"][0][self.land_idx])
-                self.ep_max[i] = max(self.ep_max[i], share)
-                invalid += int(r.invalid[0])
-                self.ep_invalid[i] += int(r.invalid[0])
-                if fin is not None:
-                    buf.done[t, i] = 1.0
-                    if fin.truncated and not fin.terminated[0]:
-                        o, m = {k: v[0:1] for k, v in fin.obs.items()}, {k: v[0:1] for k, v in fin.mask.items()}
-                        buf.boot[t, i] = self.policy.values(to_tensors(o, m, self.device)[0]).item()
-                    p = {**dict(zip(self.parts, self.ep_parts[i].tolist())), "conquest": float(self.ep_conquest[i])}
-                    episodes.append({
-                        "return": float(sum(p.values())), "length": int(self.ep_len[i]), "won": bool(fin.won[0]),
-                        "eliminated": bool(fin.eliminated[0]), "truncated": bool(fin.truncated),
-                        "invalid": int(self.ep_invalid[i]), **{f"part_{k}": v for k, v in p.items()},
-                        **{f"ev_{k}": v for k, v in zip(self.m.event_names, self.ep_events[i].tolist())},
-                        "max_territory": float(self.ep_max[i]), "final_territory": share,
-                    })
-                    g = self.wstats.end_game(i, won=bool(fin.won[0]), eliminated=bool(fin.eliminated[0]), truncated=bool(fin.truncated), max_territory=float(self.ep_max[i]),
-                                             final_territory=share, ticks=int(fin.tick),
-                                             events=dict(zip(self.m.event_names, self.ep_events[i].tolist())))
-                    if self.wlogs is not None:
-                        self.wlogs.write(i, game_line(g))
-                    self.ep_max[i] = float(results[i].obs["globals"][0][self.land_idx])
-                    self.ep_parts[i] = 0
-                    self.ep_conquest[i] = 0
-                    self.ep_events[i] = 0
-                    self.ep_len[i] = 0
-                    self.ep_invalid[i] = 0
+                if act_mask[i]:
+                    invalid += self._after_step(buf, t, i, results[i], self.vec.final[i], episodes)
             self.results = results
             self.obs, self.mask = stack_obs(results)
         _, _, _, last = self._act(self.obs, self.mask, greedy)
         info = {"invalid_rate": invalid / (buf.T * max(1, int(act_mask.sum())))}
         self.last_value = last.cpu().numpy()
+        return episodes, info
+
+    def _after_step(self, buf: RolloutBuffer, t: int, i: int, cur: Result, fin: Result | None, episodes: list[dict[str, Any]]) -> int:
+        """Registra en la fila `t` del buffer el resultado del paso del worker `i` y cierra el episodio si terminó.
+        `cur` es el resultado vigente (ya de la partida nueva si hubo reinicio) y `fin` el del episodio que acabó."""
+        r = fin if fin is not None else cur
+        bonus = self.conquest_w * float(r.events[0][self.tribes_idx])
+        buf.reward[t, i] = r.reward[0] + bonus
+        self.ep_conquest[i] += bonus
+        self.ep_parts[i] += r.reward_parts[0]
+        self.ep_events[i] += r.events[0]
+        self.ep_len[i] += 1
+        share = float(r.obs["globals"][0][self.land_idx])
+        self.ep_max[i] = max(self.ep_max[i], share)
+        invalid = int(r.invalid[0])
+        self.ep_invalid[i] += invalid
+        if fin is not None:
+            buf.done[t, i] = 1.0
+            if fin.truncated and not fin.terminated[0]:
+                o, m = {k: v[0:1] for k, v in fin.obs.items()}, {k: v[0:1] for k, v in fin.mask.items()}
+                buf.boot[t, i] = self.policy.values(to_tensors(o, m, self.device)[0]).item()
+            p = {**dict(zip(self.parts, self.ep_parts[i].tolist())), "conquest": float(self.ep_conquest[i])}
+            episodes.append({
+                "return": float(sum(p.values())), "length": int(self.ep_len[i]), "won": bool(fin.won[0]),
+                "eliminated": bool(fin.eliminated[0]), "truncated": bool(fin.truncated),
+                "invalid": int(self.ep_invalid[i]), **{f"part_{k}": v for k, v in p.items()},
+                **{f"ev_{k}": v for k, v in zip(self.m.event_names, self.ep_events[i].tolist())},
+                "max_territory": float(self.ep_max[i]), "final_territory": share,
+            })
+            g = self.wstats.end_game(i, won=bool(fin.won[0]), eliminated=bool(fin.eliminated[0]), truncated=bool(fin.truncated), max_territory=float(self.ep_max[i]),
+                                     final_territory=share, ticks=int(fin.tick),
+                                     events=dict(zip(self.m.event_names, self.ep_events[i].tolist())))
+            if self.wlogs is not None:
+                self.wlogs.write(i, game_line(g))
+            self.ep_max[i] = float(cur.obs["globals"][0][self.land_idx])
+            self.ep_parts[i] = 0
+            self.ep_conquest[i] = 0
+            self.ep_events[i] = 0
+            self.ep_len[i] = 0
+            self.ep_invalid[i] = 0
+        return invalid
+
+    @torch.no_grad()
+    def collect_async(self, buf: RolloutBuffer, greedy: bool = False, active: np.ndarray | None = None,
+                      samples: int | None = None) -> tuple[list[dict[str, Any]], dict[str, float]]:
+        """Rollout asíncrono (docs/adr/0010): cada worker avanza apenas la red le contesta, sin esperar a los demás.
+        Se reúnen `samples` pasos en total (por defecto T por worker activo); `buf.T` es el tope por worker. La política no cambia
+        durante la recolección, así que sigue siendo PPO en política. Cada worker llena su columna del buffer hasta `buf.lengths[i]`."""
+        episodes: list[dict[str, Any]] = []
+        n = self.vec.n
+        act_mask = np.ones(n, bool) if active is None else np.asarray(active, bool)
+        idx_active = [i for i in range(n) if act_mask[i]]
+        target = samples if samples is not None else buf.T * len(idx_active)
+        buf.valid[:] = False
+        buf.lengths[:] = 0
+        self.kind_counts[:] = 0
+        invalid = 0
+        net = wait = 0.0
+        busy = np.zeros(n)
+        q: queue.Queue = queue.Queue()
+        pool = ThreadPoolExecutor(max(1, len(idx_active)))
+
+        def work(i: int, a: np.ndarray) -> None:
+            t0 = time.perf_counter()
+            try:
+                g = self.vec.games[i]
+                g.send_step(a)
+                r = g.recv_result()
+                fin = None
+                if r.done and self.vec.auto_reset:
+                    fin = r
+                    self.vec._episode[i] += 1
+                    g.send_reset(self.vec._seed(i))
+                    r = g.recv_result()
+                q.put((i, r, fin, time.perf_counter() - t0, None))
+            except BaseException as e:  # se relanza en el hilo principal
+                q.put((i, None, None, 0.0, e))
+
+        def launch(ready: list[int]) -> None:
+            nonlocal net
+            t_a = time.perf_counter()
+            obs = {k: np.concatenate([self.results[i].obs[k][0:1] for i in ready]) for k in OBS_KEYS}
+            mask = {k: np.concatenate([self.results[i].mask[k][0:1] for i in ready]) for k in MASK_KEYS}
+            act, logp, _, val = self._act(obs, mask, greedy)
+            a = act.cpu().numpy().astype(np.int32)
+            lp, vl = logp.cpu().numpy(), val.cpu().numpy()
+            for j, i in enumerate(ready):
+                row = int(buf.lengths[i])
+                for k in OBS_KEYS:
+                    buf.obs[k][row, i] = obs[k][j]
+                for k in MASK_KEYS:
+                    buf.mask[k][row, i] = mask[k][j]
+                buf.action[row, i], buf.logp[row, i], buf.value[row, i] = a[j], lp[j], vl[j]
+                self.kind_counts[a[j, 0]] += 1
+            net += time.perf_counter() - t_a
+            for j, i in enumerate(ready):
+                pool.submit(work, i, a[j].reshape(1, -1))
+
+        t_start = time.perf_counter()
+        try:
+            launch(idx_active)
+            inflight, recorded = len(idx_active), 0
+            while inflight:
+                t_w = time.perf_counter()
+                items = [q.get()]
+                wait += time.perf_counter() - t_w
+                while True:
+                    try:
+                        items.append(q.get_nowait())
+                    except queue.Empty:
+                        break
+                ready: list[int] = []
+                for i, r, fin, dt, err in items:
+                    if err is not None:
+                        raise err
+                    inflight -= 1
+                    busy[i] += dt
+                    row = int(buf.lengths[i])
+                    invalid += self._after_step(buf, row, i, r, fin, episodes)
+                    buf.valid[row, i] = True
+                    buf.lengths[i] += 1
+                    recorded += 1
+                    self.results[i] = r
+                    if recorded + inflight + len(ready) < target and buf.lengths[i] < buf.T:
+                        ready.append(i)
+                if ready:
+                    launch(ready)
+                    inflight += len(ready)
+        finally:
+            pool.shutdown(wait=True)
+        wall = time.perf_counter() - t_start
+        self.obs, self.mask = stack_obs(self.results)
+        _, _, _, last = self._act(self.obs, self.mask, greedy)
+        info = {"invalid_rate": invalid / max(1, int(buf.valid.sum()))}
+        self.last_value = last.cpu().numpy()
+        for i in range(n):
+            if not act_mask[i]:
+                buf.lengths[i] = buf.T  # sin muestras válidas: no importa
+        self.timing = {"net": net, "env": wait, "busy": float(busy.sum()), "max": wall * max(1, len(idx_active))}
         return episodes, info
 
 
@@ -317,13 +425,16 @@ def train(cfg: dict[str, Any], run_dir: str | Path | None = None, resume: str | 
             wstats.load(run / "workers.json")
         runner = Runner(vec, policy, device, wstats, wlogs)
         T = int(cfg["rollout_steps"])
-        buf = RolloutBuffer(T, workers, {k: b.shape for k, b in m.obs.items()}, {k: b.shape for k, b in m.mask.items()}, m.action_dims)
+        async_mode = str(cfg.get("rollout_mode", "sync")) == "async"
+        if str(cfg.get("rollout_mode", "sync")) not in ("sync", "async"):
+            raise ValueError("rollout_mode debe ser 'sync' o 'async'")
+        buf = RolloutBuffer(T * int(cfg.get("rollout_cap", 2)) if async_mode else T, workers, {k: b.shape for k, b in m.obs.items()}, {k: b.shape for k, b in m.mask.items()}, m.action_dims)
         n_params = sum(p.numel() for p in policy.parameters())
         runctl.write_json(run / "architecture.json", runctl.architecture(policy))
         runctl.write_json(run / "control.json", {"command": "run"})
         if log:
             print(f"escenario: {scenario_text(cfg['env'])}", flush=True)
-            print(f"run={run} workers={workers} params={n_params:,} T={T} protocolo=v{m.raw['version']} dispositivo={device}"
+            print(f"run={run} rollout={'asíncrono' if async_mode else 'sincrónico'} workers={workers} params={n_params:,} T={T} protocolo=v{m.raw['version']} dispositivo={device}"
                   + (f" ({torch.cuda.get_device_name(device)})" if device.type == "cuda" else ""), flush=True)
         total = int(cfg["updates"])
         goal = int(cfg["episodes"]) if cfg.get("episodes") else None  # duración en partidas (docs/specs/dashboard.md §5)
@@ -368,17 +479,20 @@ def train(cfg: dict[str, Any], run_dir: str | Path | None = None, resume: str | 
                 progress = st["eps"] / goal if goal else (u - 1) / max(1, total)
                 frac = max(0.0, 1 - progress)
                 for g in opt.param_groups:
-                    g["lr"] = pcfg.lr * max(0.1, frac)
+                    g["lr"] = pcfg.lr * max(pcfg.lr_floor, frac)
                 ent_coef = pcfg.ent_coef_final + (pcfg.ent_coef - pcfg.ent_coef_final) * frac
                 runner.conquest_w = conquest_weight(cfg, progress)
                 tr = time.time()
-                episodes, info = runner.collect(buf, active=active)
+                if async_mode:
+                    episodes, info = runner.collect_async(buf, active=active, samples=T * int(active.sum()))
+                else:
+                    episodes, info = runner.collect(buf, active=active)
                 t_roll = time.time() - tr
                 rstd.update(buf.reward, buf.done, buf.valid)
-                buf.compute_gae(runner.last_value, pcfg.gamma, pcfg.gae_lambda, rstd.std)
+                buf.compute_gae(runner.last_value, pcfg.gamma, pcfg.gae_lambda, rstd.std, use_lengths=async_mode)
                 tu = time.time()
                 stats = ppo_update(policy, opt, buf, pcfg, ent_coef, rng, device)
-                steps += T * int(active.sum())
+                steps += int(buf.valid.sum()) if async_mode else T * int(active.sum())
                 st["u"], st["eps"] = u, st["eps"] + len(episodes)
                 for i, g in enumerate(vec.games):
                     for line in g.drain_stderr():
@@ -389,7 +503,7 @@ def train(cfg: dict[str, Any], run_dir: str | Path | None = None, resume: str | 
                     "update": u, "steps": steps, "episodes_done": st["eps"], "active_workers": int(active.sum()),
                     "time": round(time.time() - t0, 1),
                     "t_rollout": round(t_roll, 2), "t_update": round(time.time() - tu, 2),
-                    "t_net": round(runner.timing["net"], 2), "t_env": round(runner.timing["env"], 2),
+                    "samples": int(buf.valid.sum()), "t_net": round(runner.timing["net"], 2), "t_env": round(runner.timing["env"], 2),
                     "worker_util": round(runner.timing["busy"] / runner.timing["max"], 3) if runner.timing["max"] else None,
                     "reward_scale": rstd.std, "ent_coef": ent_coef, **stats, **info,
                     "noop_frac": float(runner.kind_counts[0] / max(1, runner.kind_counts.sum())),
@@ -415,7 +529,7 @@ def train(cfg: dict[str, Any], run_dir: str | Path | None = None, resume: str | 
                           f"roll={t_roll:.1f}s (red {row['t_net']:.1f} motor {row['t_env']:.1f} util {row['worker_util'] or 0:.0%}) upd={row['t_update']:.1f}s", flush=True)
                 if u % cfg["checkpoint_every"] == 0 or done:
                     save(f"ckpt_{u:06d}.pt")
-                st["sps"] = T * int(active.sum()) / max(1e-6, t_roll + row["t_update"])
+                st["sps"] = (int(buf.valid.sum()) if async_mode else T * int(active.sum())) / max(1e-6, t_roll + row["t_update"])
                 if done:
                     status("finished")
                     break

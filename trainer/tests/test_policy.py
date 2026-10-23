@@ -1,4 +1,6 @@
 """Red, política autorregresiva y PPO contra el motor real (docs/adr/0007)."""
+import json
+
 import numpy as np
 import pytest
 
@@ -185,3 +187,60 @@ def test_vecgame_con_perfil_mide_latencias_y_no_cambia_resultados():
             out[prof] = ([r.reward.tolist() for step in rs for r in step], list(v.lat))
     assert out[False][0] == out[True][0]  # mismos resultados con y sin hilos
     assert all(x > 0 for x in out[True][1]) and out[False][1] == [0.0, 0.0]
+
+
+def test_gae_con_largos_distintos_equivale_a_buffers_independientes():
+    rng = np.random.default_rng(3)
+    T, N = 12, 3
+    shapes = {"x": (1,)}
+    def make(t):
+        b = RolloutBuffer.__new__(RolloutBuffer)
+        b.T, b.N = t, 1
+        b.reward = rng.normal(size=(t, 1)).astype(np.float32); b.value = rng.normal(size=(t, 1)).astype(np.float32)
+        b.done = np.zeros((t, 1), np.float32); b.done[min(4, t - 1), 0] = 1.0 if t > 5 else 0.0
+        b.boot = np.zeros((t, 1), np.float32); b.adv = np.zeros((t, 1), np.float32); b.ret = np.zeros((t, 1), np.float32)
+        b.lengths = np.full(1, t)
+        return b
+    lens = [12, 7, 3]
+    parts = [make(L) for L in lens]
+    lastv = rng.normal(size=3).astype(np.float32)
+    big = RolloutBuffer.__new__(RolloutBuffer)
+    big.T, big.N = T, N
+    for name in ("reward", "value", "done", "boot", "adv", "ret"):
+        arr = np.zeros((T, N), np.float32)
+        for j, b in enumerate(parts):
+            arr[: lens[j], j] = getattr(b, name)[:, 0]
+        setattr(big, name, arr)
+    big.lengths = np.array(lens)
+    big.compute_gae(lastv, 0.99, 0.9, 2.0, use_lengths=True)
+    for j, b in enumerate(parts):
+        b.compute_gae(lastv[j: j + 1], 0.99, 0.9, 2.0)
+        assert np.allclose(big.adv[: lens[j], j], b.adv[:, 0], atol=1e-5)
+        assert np.allclose(big.ret[: lens[j], j], b.ret[:, 0], atol=1e-5)
+
+
+def test_rollout_asincrono_llena_el_objetivo_y_respeta_el_tope(tmp_path):
+    from openfront_rl.vec_env import VecGame
+    from openfront_rl.train import Runner
+    T, N = 10, 2
+    with VecGame(N, {**CFG, "agents": 1}, base_seed="asinc", profile=True) as vec:
+        m = vec.manifest
+        pol = Policy(m, ModelConfig.from_dict({}))
+        runner = Runner(vec, pol, torch.device("cpu"))
+        buf = RolloutBuffer(2 * T, N, {k: b.shape for k, b in m.obs.items()}, {k: b.shape for k, b in m.mask.items()}, m.action_dims)
+        eps, info = runner.collect_async(buf, samples=T * N)
+        assert int(buf.valid.sum()) == T * N
+        assert (buf.lengths >= 1).all() and (buf.lengths <= 2 * T).all()
+        for i in range(N):  # cada columna es contigua desde 0 hasta su largo
+            assert buf.valid[: buf.lengths[i], i].all() and not buf.valid[buf.lengths[i]:, i].any()
+        assert runner.last_value.shape == (N,)
+        buf.compute_gae(runner.last_value, 0.997, 0.95, 0.05, use_lengths=True)
+        assert np.isfinite(buf.adv[buf.valid]).all()
+
+
+def test_entrenar_con_rollout_asincrono(tmp_path):
+    cfg = load_config(None, {"name": "asinc", "workers": 2, "updates": 3, "rollout_steps": 16, "rollout_mode": "async", "device": "cpu",
+                             "eval": {"every": 0, "episodes": 1}, "env": CFG})
+    run = train(cfg, tmp_path / "r", log=False)
+    rows = [json.loads(x) for x in (run / "metrics.jsonl").read_text().splitlines()]
+    assert len(rows) == 3 and all(r["samples"] == 32 and 0 < r["worker_util"] <= 1.0 for r in rows)

@@ -48,3 +48,6 @@ El run se mide en **partidas** (`episodes` en la configuración, `--episodes N` 
 
 ## Dispositivo (CPU / GPU)
 `device` en la config: `auto` (por defecto) usa la GPU CUDA si PyTorch la ve y, si no, la CPU; `cpu` o `cuda` fuerzan uno (`cuda` sin GPU falla con un mensaje claro). La primera línea del log dice `dispositivo=...`. Los checkpoints se guardan siempre en CPU y se pueden reanudar en cualquier dispositivo. Comprobar CUDA: `python -c "import torch; print(torch.cuda.is_available())"`; si da `False` hay que instalar PyTorch con CUDA (https://pytorch.org/get-started/locally/). En el i5-9400 la actualización PPO en CPU era el 56 % del tiempo (7,5 s de 13,3 s por actualización).
+
+## Rollout sincrónico o asíncrono
+`rollout_mode: sync` (por defecto) avanza los workers al mismo paso; `async` deja que cada uno avance a su ritmo y reúne `rollout_steps × workers` muestras en total, con un tope por worker de `rollout_cap × rollout_steps` (ADR 0010, experimental). `metrics.jsonl` y el log traen `t_net`, `t_env` y `worker_util` (el log: `roll=5.9s (red 0.8 motor 5.0 util 62%)`). `ppo.lr_floor` (0,1 por defecto) fija el mínimo del lr al decaer con el progreso.
