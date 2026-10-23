@@ -1,12 +1,12 @@
-# Etapa 2 del currículo: igual que ppo_base pero con 1 nación Easy además de las 20 tribus. Se reanuda desde un run de ppo_base
-# (--resume). Medido con el checkpoint de Day2 (sin reentrenar): con 3 naciones Easy 0/4 victorias y 3 eliminaciones; con 1 nación 1/5.
-name: ppo_naciones
+# Versión del archivo: v1. El `name:` interno no lleva prefijo a propósito (da el nombre del run por defecto y la semilla de las partidas).
+# PPO plano contra tribus (bots) en Britannia: banco de pruebas del pipeline. Pasar a World cuando la curva suba.
+name: ppo_base
 seed: 0
 device: auto          # auto = GPU (CUDA) si existe, si no CPU; cpu o cuda para forzar
 workers: null          # null = núcleos − 1 (5 en un i5-9400)
 rollout_steps: 128     # 128 pasos × 5 partidas = 640 muestras por actualización
 updates: 1000
-episodes: 150         # duración del run en partidas de entrenamiento terminadas (anula `updates`)
+episodes: 50          # duración del run en partidas de entrenamiento terminadas (anula `updates`)
 checkpoint_every: 25
 eval:
   every: 50
@@ -14,7 +14,7 @@ eval:
 env:
   map: Britannia
   bots: 20
-  nations: 1
+  nations: disabled
   difficulty: Easy
   decisionInterval: 10
   maxTicks: 18000

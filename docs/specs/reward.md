@@ -22,7 +22,7 @@ Es shaping basado en potencial (Ng et al., 1999): se cobra al mejorar, se devuel
 | 7 | `troops` | 0.05 | por paso, no potencial: tropas en la zona justa (§2c) |
 | (trainer) | `conquest` | 0.20, decae a 0 | bonus por tribu conquistada (§9) |
 
-Con los valores de entrenamiento (`configs/ppo_base.yaml`) la suma de los presupuestos es 0.88 < 1: **ganar siempre pesa más** que todo lo que se puede ganar por el camino. Los pesos son campos de `EnvConfig` (`rewardTerritoryWeight`, `rewardAttackWeight`, `rewardEconomyWeight`, `rewardDefenseWeight`, `rewardMilestonesWeight`, `rewardTroopsWeight`). Con peso 0 el componente no se calcula. Valores por defecto del puente: territorio 0.8 (equivale a `1.0 · Δ%` de la v0), el resto 0. Ningún componente se paga durante la fase de spawn ni después de que el agente fue eliminado.
+Con los valores de entrenamiento (`configs/v1_ppo_base.yaml`) la suma de los presupuestos es 0.88 < 1: **ganar siempre pesa más** que todo lo que se puede ganar por el camino. Los pesos son campos de `EnvConfig` (`rewardTerritoryWeight`, `rewardAttackWeight`, `rewardEconomyWeight`, `rewardDefenseWeight`, `rewardMilestonesWeight`, `rewardTroopsWeight`). Con peso 0 el componente no se calcula. Valores por defecto del puente: territorio 0.8 (equivale a `1.0 · Δ%` de la v0), el resto 0. Ningún componente se paga durante la fase de spawn ni después de que el agente fue eliminado.
 
 ## 2. Potenciales
 Todos salen del estado del motor, tal como lo ve cualquier jugador.

@@ -40,7 +40,7 @@ La observación v2 (ADR 0006) tiene cuatro familias de datos: grid `[20,32,64]`,
 
 **Almacenamiento**: la observación son ~182 KB por paso por agente. Un rollout de 5 partidas × 128 pasos = 640 pasos ≈ 117 MB en float32; se aceptan. Se guarda el grid en float16 en el buffer.
 
-**Configuración**: `configs/ppo_base.yaml`; cada ejecución guarda la config, las semillas y la versión del manifiesto junto con el checkpoint (regla 7).
+**Configuración**: `configs/v1_ppo_base.yaml`; cada ejecución guarda la config, las semillas y la versión del manifiesto junto con el checkpoint (regla 7).
 
 ## Consecuencias
 - Simple de enmascarar y de depurar: cada campo tiene su propia distribución.

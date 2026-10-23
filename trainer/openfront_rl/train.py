@@ -1,6 +1,6 @@
 """Entrenamiento PPO contra bots (docs/adr/0007-red-por-ramas-y-ppo.md).
 
-    python -m openfront_rl.train --config configs/ppo_base.yaml
+    python -m openfront_rl.train --config configs/v1_ppo_base.yaml
 
 Cada ejecución crea `runs/<nombre>-<semilla>/` con `config.yaml`, `metrics.jsonl` y los checkpoints (que llevan la
 configuración, la versión del protocolo y las semillas dentro).

@@ -35,7 +35,7 @@ python scripts/bench.py --workers 1 5 --map World --bots 400
 
 ## Entrenar
 ```
-python -m openfront_rl.train --config configs/ppo_base.yaml
+python -m openfront_rl.train --config configs/v1_ppo_base.yaml
 ```
 Crea `runs/<nombre>-<semilla>/` con `config.yaml`, `metrics.jsonl` (una línea por actualización: recompensa por componente, entropía, KL, acciones inválidas, fracción de `noop`, evaluación cada N) y `ckpt_*.pt` / `latest.pt` (modelo, optimizador, config, versión del protocolo). Se reanuda con `--resume runs/.../latest.pt`. En la nube (2 núcleos) una actualización de 256 muestras tarda ~10 s; en un i5-9400 con 5 partidas, 640 muestras por actualización.
 
@@ -51,3 +51,6 @@ El run se mide en **partidas** (`episodes` en la configuración, `--episodes N` 
 
 ## Rollout sincrónico o asíncrono
 `rollout_mode: sync` (por defecto) avanza los workers al mismo paso; `async` deja que cada uno avance a su ritmo y reúne `rollout_steps × workers` muestras en total, con un tope por worker de `rollout_cap × rollout_steps` (ADR 0010, experimental). `metrics.jsonl` y el log traen `t_net`, `t_env` y `worker_util` (el log: `roll=5.9s (red 0.8 motor 5.0 util 62%)`). `ppo.lr_floor` (0,1 por defecto) fija el mínimo del lr al decaer con el progreso.
+
+## Versiones de las configs
+Los archivos de `configs/` llevan prefijo de versión (`v1_ppo_base`, `v2_ppo_naciones`, `v3_ppo_naciones_estable`, `v4_ppo_critico`, `v5_ppo_prueba`); la siguiente prueba usa `v6_…`. El campo `name:` dentro del YAML no lleva el prefijo (da el nombre del run por defecto y la semilla de las partidas, así que cambiarlo cambiaría las partidas de un run reproducido).

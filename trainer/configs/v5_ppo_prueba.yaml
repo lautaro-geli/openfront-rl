@@ -1,20 +1,25 @@
-# Prueba del crítico (Day5): igual que ppo_naciones_estable pero con value_clip apagado (100) y vf_coef 1.0. Se reanuda desde Day4/ckpt_000400.pt.
+# Prueba conjunta (Day6): 3 workers + rollout asíncrono (ADR 0010) + crítico sin value_clip + evaluación de 20 + lr_floor 0,3.
+# Se reanuda desde Day5/latest.pt (partida 289): `episodes` es el total absoluto, 439 = 150 partidas nuevas.
+# Cambia varias cosas a la vez: sirve para ver si el conjunto funciona y cuánto tarda, no para atribuir el efecto a una sola.
+# Prueba del crítico (Day5): igual que v3_ppo_naciones_estable pero con value_clip apagado (100) y vf_coef 1.0. Se reanuda desde Day4/ckpt_000400.pt.
 # Motivo: en Day4 el crítico predecía ~0,17 con retornos reales de ~4 (EV 0,03 contra el retorno completo; un reajuste offline llega a 0,4–0,5).
 # `episodes` es el total absoluto: se reanuda en la partida 188, así que 288 = 100 partidas nuevas.
-# Etapa 2 estable (Day4): como ppo_naciones pero con lr 1e-4 (Day3 oscilaba: rachas de ~60 % de victorias y de 0 %) y evaluación de
-# 10 partidas. Se reanuda desde Day3/ckpt_000175.pt. Etapa 2 del currículo: igual que ppo_base pero con 1 nación Easy además de las 20 tribus. Se reanuda desde un run de ppo_base
+# Etapa 2 estable (Day4): como v2_ppo_naciones pero con lr 1e-4 (Day3 oscilaba: rachas de ~60 % de victorias y de 0 %) y evaluación de
+# 10 partidas. Se reanuda desde Day3/ckpt_000175.pt. Etapa 2 del currículo: igual que v1_ppo_base pero con 1 nación Easy además de las 20 tribus. Se reanuda desde un run de v1_ppo_base
 # (--resume). Medido con el checkpoint de Day2 (sin reentrenar): con 3 naciones Easy 0/4 victorias y 3 eliminaciones; con 1 nación 1/5.
-name: ppo_critico
+name: ppo_prueba
 seed: 0
 device: auto          # auto = GPU (CUDA) si existe, si no CPU; cpu o cuda para forzar
-workers: null          # null = núcleos − 1 (5 en un i5-9400)
-rollout_steps: 128     # 128 pasos × 5 partidas = 640 muestras por actualización
+workers: 3             # null = núcleos − 1 (5 en un i5-9400)
+rollout_steps: 214     # 3 workers × 214 = 642 muestras por actualización (como 5 × 128 antes)
 updates: 1000
-episodes: 288         # duración del run en partidas de entrenamiento terminadas (anula `updates`)
+rollout_mode: async   # cada worker avanza a su ritmo (ADR 0010, experimental)
+rollout_cap: 2        # tope de pasos por worker = 2 × rollout_steps
+episodes: 439         # duración del run en partidas de entrenamiento terminadas (anula `updates`)
 checkpoint_every: 25
 eval:
-  every: 50
-  episodes: 10
+  every: 100        # actualizaciones (~48 partidas)
+  episodes: 20
 env:
   map: Britannia
   bots: 20
@@ -51,3 +56,4 @@ ppo:
   ent_coef_final: 0.001
   value_clip: 100.0   # Day4 usaba 0.2 (por defecto): el crítico no podía alcanzar retornos de ~4–14 en la escala de recompensa
   vf_coef: 1.0
+  lr_floor: 0.3       # Day4/Day5: el lr caía hasta 0,1·lr y el expl_var se hundía al final (hipótesis)

@@ -1,13 +1,16 @@
-# Etapa 2 estable (Day4): como ppo_naciones pero con lr 1e-4 (Day3 oscilaba: rachas de ~60 % de victorias y de 0 %) y evaluación de
-# 10 partidas. Se reanuda desde Day3/ckpt_000175.pt. Etapa 2 del currículo: igual que ppo_base pero con 1 nación Easy además de las 20 tribus. Se reanuda desde un run de ppo_base
+# Prueba del crítico (Day5): igual que v3_ppo_naciones_estable pero con value_clip apagado (100) y vf_coef 1.0. Se reanuda desde Day4/ckpt_000400.pt.
+# Motivo: en Day4 el crítico predecía ~0,17 con retornos reales de ~4 (EV 0,03 contra el retorno completo; un reajuste offline llega a 0,4–0,5).
+# `episodes` es el total absoluto: se reanuda en la partida 188, así que 288 = 100 partidas nuevas.
+# Etapa 2 estable (Day4): como v2_ppo_naciones pero con lr 1e-4 (Day3 oscilaba: rachas de ~60 % de victorias y de 0 %) y evaluación de
+# 10 partidas. Se reanuda desde Day3/ckpt_000175.pt. Etapa 2 del currículo: igual que v1_ppo_base pero con 1 nación Easy además de las 20 tribus. Se reanuda desde un run de v1_ppo_base
 # (--resume). Medido con el checkpoint de Day2 (sin reentrenar): con 3 naciones Easy 0/4 victorias y 3 eliminaciones; con 1 nación 1/5.
-name: ppo_naciones_estable
+name: ppo_critico
 seed: 0
 device: auto          # auto = GPU (CUDA) si existe, si no CPU; cpu o cuda para forzar
 workers: null          # null = núcleos − 1 (5 en un i5-9400)
 rollout_steps: 128     # 128 pasos × 5 partidas = 640 muestras por actualización
 updates: 1000
-episodes: 200         # duración del run en partidas de entrenamiento terminadas (anula `updates`)
+episodes: 288         # duración del run en partidas de entrenamiento terminadas (anula `updates`)
 checkpoint_every: 25
 eval:
   every: 50
@@ -43,6 +46,8 @@ ppo:
   clip: 0.2
   epochs: 3
   minibatch: 128
-  lr: 0.0001
+  lr: 0.00015       # el lr decae con el progreso (episodes_done/episodes): empezando en 188/288 queda ~5e-5, similar al inicio de Day4
   ent_coef: 0.01
   ent_coef_final: 0.001
+  value_clip: 100.0   # Day4 usaba 0.2 (por defecto): el crítico no podía alcanzar retornos de ~4–14 en la escala de recompensa
+  vf_coef: 1.0

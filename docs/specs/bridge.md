@@ -103,7 +103,7 @@ r = territory + attack + economy + defense + terminal      (docs/specs/reward.md
 Comunicación con Python, varias partidas en paralelo, construcción de edificios, diplomacia, ataques anfibios, y `miniGameMap`. Cada uno se añade con su propia spec.
 
 ## 9. Preguntas abiertas
-- Valores correctos de los pesos de la recompensa (ver `reward.md`; `ppo_base.yaml` trae un punto de partida).
+- Valores correctos de los pesos de la recompensa (ver `reward.md`; `v1_ppo_base.yaml` trae un punto de partida).
 - ~~Si la malla de muestreo 4 × 4 pierde territorios pequeños en World~~ Medido en ADR 0005: no ve territorios de 1 tile; con 32 × 64 ve el 67–84 % de las celdas ocupadas.
 - Si `maxTicks = 6000` (10 min de juego) alcanza para que la política aleatoria llegue a ver victorias o eliminaciones.
 
