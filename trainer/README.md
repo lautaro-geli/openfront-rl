@@ -54,3 +54,6 @@ El run se mide en **partidas** (`episodes` en la configuración, `--episodes N` 
 
 ## Versiones de las configs
 Los archivos de `configs/` llevan prefijo de versión (`v1_ppo_base`, `v2_ppo_naciones`, `v3_ppo_naciones_estable`, `v4_ppo_critico`, `v5_ppo_prueba`); la siguiente prueba usa `v6_…`. El campo `name:` dentro del YAML no lleva el prefijo (da el nombre del run por defecto y la semilla de las partidas, así que cambiarlo cambiaría las partidas de un run reproducido).
+
+## Evaluación sin sesgo
+`evaluate` (train.py) reparte las partidas pedidas en cuotas fijas por worker y cada worker se detiene al cumplirla. Antes se contaban las primeras N partidas en terminar, que son las más cortas (eliminaciones y victorias rápidas), y las evaluaciones de runs anteriores (Day1–Day7) tienen ese sesgo: sobrestiman las eliminaciones. No son comparables con las nuevas.

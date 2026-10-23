@@ -294,32 +294,43 @@ class Runner:
 
 
 def evaluate(policy: Policy, env_cfg: dict[str, Any], workers: int, episodes: int, seed: str, device: torch.device) -> dict[str, float]:
-    """Partidas con semillas propias (distintas de las del entrenamiento). Devuelve medias."""
+    """Partidas con semillas propias (distintas de las del entrenamiento). Devuelve medias.
+
+    Cada worker juega una cuota fija de partidas y se detiene al cumplirla: así se promedian todas las partidas pedidas y no las
+    primeras en terminar (esas son las más cortas y sesgaban la evaluación hacia eliminaciones y victorias rápidas).
+    """
     n = max(1, min(workers, episodes))
+    quota = [episodes // n + (1 if i < episodes % n else 0) for i in range(n)]
+    played = [0] * n
     done: list[dict[str, float]] = []
     with VecGame(n, {**env_cfg, "agents": 1}, base_seed=f"eval-{seed}") as vec:
         res = vec.reset()
+        active = np.ones(n, bool)
         acc = np.zeros((n, len(vec.manifest.reward_parts)))  # suma de componentes del episodio en curso, por entorno
         evs = np.zeros((n, len(vec.manifest.event_names)))
         guard = 0
-        while len(done) < episodes and guard < 20000:
+        while active.any() and guard < 20000:
             guard += 1
             obs, mask = stack_obs(res)
             with torch.no_grad():
                 act, *_ = policy(*to_tensors(obs, mask, device))
-            res = vec.step(act.cpu().numpy().astype(np.int32).reshape(n, 1, -1))
+            res = vec.step(act.cpu().numpy().astype(np.int32).reshape(n, 1, -1), active)
             for i in range(n):
+                if not active[i]:
+                    continue
                 fin = vec.final[i]
                 acc[i] += (fin if fin is not None else res[i]).reward_parts[0]
                 evs[i] += (fin if fin is not None else res[i]).events[0]
                 if fin is not None:
-                    if len(done) < episodes:
-                        p = dict(zip(vec.manifest.reward_parts, acc[i].tolist()))
-                        done.append({"won": float(fin.won[0]), "eliminated": float(fin.eliminated[0]),
-                                     "return": float(sum(p.values())), **{f"part_{k}": v for k, v in p.items()},
-                                     **{f"ev_{k}": v for k, v in zip(vec.manifest.event_names, evs[i].tolist())}})
+                    p = dict(zip(vec.manifest.reward_parts, acc[i].tolist()))
+                    done.append({"won": float(fin.won[0]), "eliminated": float(fin.eliminated[0]),
+                                 "return": float(sum(p.values())), **{f"part_{k}": v for k, v in p.items()},
+                                 **{f"ev_{k}": v for k, v in zip(vec.manifest.event_names, evs[i].tolist())}})
                     acc[i] = 0
                     evs[i] = 0
+                    played[i] += 1
+                    if played[i] >= quota[i]:
+                        active[i] = False
     keys = done[0].keys() if done else []
     return {f"eval_{k}": float(np.mean([d[k] for d in done])) for k in keys} | {"eval_episodes": float(len(done))}
 

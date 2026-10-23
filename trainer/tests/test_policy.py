@@ -244,3 +244,12 @@ def test_entrenar_con_rollout_asincrono(tmp_path):
     run = train(cfg, tmp_path / "r", log=False)
     rows = [json.loads(x) for x in (run / "metrics.jsonl").read_text().splitlines()]
     assert len(rows) == 3 and all(r["samples"] == 32 and 0 < r["worker_util"] <= 1.0 for r in rows)
+
+
+def test_evaluate_juega_exactamente_las_partidas_pedidas():
+    from openfront_rl.train import evaluate
+    with NodeGame(CFG) as g:
+        m = g.manifest
+    pol = Policy(m, ModelConfig.from_dict({})).eval()
+    out = evaluate(pol, CFG, workers=2, episodes=3, seed="ev", device=torch.device("cpu"))
+    assert out["eval_episodes"] == 3.0 and 0.0 <= out["eval_won"] <= 1.0
