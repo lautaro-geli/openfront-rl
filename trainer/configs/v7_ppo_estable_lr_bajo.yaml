@@ -1,0 +1,52 @@
+# v7 (Day8): prueba corta de estabilidad desde Day5/ckpt_000620.pt (el mejor modelo vs 1 nación Easy: 46 % ±20 en 24 partidas sin sesgo).
+# Day6 y Day7 (vf_coef 1.0, value_clip apagado, lr 1,5e-4) empeoraron ese agente (Day7 ckpt_000800: 4 %). Aquí: lr 3e-5 constante y crítico por defecto (value_clip 0,2, vf_coef 0,5).
+# `episodes` es el total absoluto: 339 = 50 partidas nuevas. Éxito = que la evaluación (20 partidas, sin sesgo) no baje del ~46 %.
+name: ppo_v7
+seed: 0
+device: auto          # auto = GPU (CUDA) si existe, si no CPU; cpu o cuda para forzar
+workers: 4          # 4 de los 6 núcleos: deja la PC usable
+rollout_steps: 160     # 4 workers × 160 = 640 muestras por actualización (como 5 × 128 en Day5)
+updates: 1000
+rollout_mode: sync    # el asíncrono no ganó velocidad (Day6, ADR 0010): la red serializada era el límite
+episodes: 339         # total absoluto: se reanuda en la partida 289, así que son 50 partidas nuevas
+checkpoint_every: 25
+eval:
+  every: 50         # actualizaciones (~25 partidas): 2 evaluaciones en el run
+  episodes: 20
+env:
+  map: Britannia
+  bots: 20
+  nations: 1
+  difficulty: Easy
+  decisionInterval: 10
+  maxTicks: 18000
+  grid: {h: 32, w: 64}
+  samples: 4
+  rewardTerritoryWeight: 0.40
+  rewardAttackWeight: 0.08
+  rewardEconomyWeight: 0.04
+  rewardDefenseWeight: 0.05
+  rewardMilestonesWeight: 0.06   # primera ciudad, puerto y fábrica (reward.md §2b)
+  rewardTroopsWeight: 0.05       # tropas en la zona justa, ~42 % del máximo (reward.md §2c)
+  territoryKnee: 0.15            # el primer 15 % del mapa paga el 35 % del presupuesto de territorio (reward.md §2)
+  territoryKneeShare: 0.35
+  # Sin diplomacia ni comercio: contra tribus no aportan (docs/specs/actions.md §4b).
+  disabledActions: [alliance_request, alliance_reject, alliance_break, alliance_extend, embargo_start, embargo_stop,
+                    embargo_all_start, embargo_all_stop, target_player, emoji, donate_gold, donate_troops,
+                    cancel_attack, cancel_boat, delete_unit]
+  maxStructures: {post: 4}       # los puestos de defensa solo pagan hasta 4 (reward.md §2)
+# Bonus por tribu conquistada: máximo al empezar y 0 a partir del 50 % del run (docs/specs/reward.md §9).
+conquest: {budget: 0.20, until: 0.5}
+model: {}
+ppo:
+  gamma: 0.997
+  gae_lambda: 0.95
+  clip: 0.2
+  epochs: 3
+  minibatch: 128
+  lr: 0.00003       # 5 veces menos que Day5 (1,5e-4 con decaimiento)
+  ent_coef: 0.01
+  ent_coef_final: 0.001
+  value_clip: 0.2     # por defecto (Day4)
+  vf_coef: 0.5        # por defecto (Day4)
+  lr_floor: 1.0       # sin decaimiento: se reanuda con el progreso en 289/339 y el lr caería a casi 0

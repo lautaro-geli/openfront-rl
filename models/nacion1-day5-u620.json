@@ -1,8 +1,8 @@
 {
-  "source": "runs/Day3/ckpt_000175.pt (ppo_naciones, reanudado de Day2)",
-  "update": 175,
-  "episodes_done": 81,
-  "steps": 112000,
+  "source": "runs/Day5/ckpt_000620.pt (v4_ppo_critico, reanudado de Day4/ckpt_000400)",
+  "update": 620,
+  "episodes_done": 289,
+  "steps": 396800,
   "protocol_version": 3,
   "scenario": {
     "map": "Britannia",
@@ -46,19 +46,19 @@
     }
   },
   "config": {
-    "name": "ppo_naciones",
+    "name": "ppo_critico",
     "seed": 0,
-    "device": "cpu",
+    "device": "auto",
     "workers": 5,
     "torch_threads": null,
     "low_priority": true,
     "rollout_steps": 128,
     "updates": 1000,
-    "episodes": 150,
+    "episodes": 288,
     "checkpoint_every": 25,
     "eval": {
       "every": 50,
-      "episodes": 5
+      "episodes": 10
     },
     "env": {
       "map": "Britannia",
@@ -112,13 +112,15 @@
       "clip": 0.2,
       "epochs": 3,
       "minibatch": 128,
-      "lr": 0.0003,
+      "lr": 0.00015,
       "ent_coef": 0.01,
-      "ent_coef_final": 0.001
+      "ent_coef_final": 0.001,
+      "value_clip": 100.0,
+      "vf_coef": 1.0
     }
   },
-  "results": "Con 20 tribus + 1 nación Easy: en las actualizaciones 147-176 ~58 % de victorias en entrenamiento; la tasa oscila (Day3: 15/45 en total, 0/13 al final). Reproducido aparte: 1/5 victorias.",
-  "note": "Último punto bueno de Day3, antes del colapso de la actualización ~177. Currículo etapa 2.",
-  "exported": "2026-10-22",
-  "size_bytes": 13509839
+  "results": "Evaluación sin sesgo (24 partidas, mismas semillas, política estocástica, Britannia + 20 tribus + 1 nación Easy): 11 victorias (46 %, ±20), 1 eliminación, 8 por tiempo, 4 ganó otro; 7,6 tribus y 0,04 naciones conquistadas por partida. En entrenamiento (Day5): 51/101 victorias (50 %), 5 eliminados. Evaluaciones antiguas del entrenamiento (sesgadas): 40, 20, 40, 30 %.",
+  "note": "Mejor modelo contra 1 nación Easy. Entrenar más desde aquí (Day6: nación Medium; Day7: Easy con vf_coef 1.0 y lr_floor 0.3) lo empeoró: Day7 ckpt_000800 gana 1/24 (4 %).",
+  "exported": "2026-10-23",
+  "size_bytes": 13507343
 }
