@@ -40,7 +40,7 @@ Entrenar una política (PyTorch, PPO + self-play) que juegue partidas completas 
 
 ## Mapa de documentación
 - `docs/architecture.md`: visión general, diagramas y fases.
-- `docs/adr/`: decisiones de arquitectura (0009: modelos en git).
+- `docs/adr/`: decisiones de arquitectura (0009: modelos en git; 0010: rollout asíncrono, propuesta).
 - `docs/specs/`: observaciones, acciones, recompensa, protocolo, panel (`dashboard.md`).
 - `docs/phase0-investigation.md`: prompt de la primera sesión (investigación del motor).
 
@@ -49,7 +49,7 @@ Entrenar una política (PyTorch, PPO + self-play) que juegue partidas completas 
 - Instalar el motor con `npm ci --ignore-scripts` dentro de `vendor/openfront` (no `npm install`). `node_modules` queda ignorado por git.
 
 ## Estado actual
-**Fases 0, 1 y 2 hechas; Fase 3 escrita y en pruebas** (falta entrenar en el PC del usuario). `bridge/`: observación v2, 24 acciones con máscara, recompensa v2.2 por categorías con presupuesto (terminal > territorio por tramos > ataque > economía > defensa > hitos de construcción > tropas en la zona justa; `docs/specs/reward.md`), registro de eventos (ataques, tribus conquistadas, misiles, construcciones realmente colocadas por tipo) y protocolo v3. `trainer/openfront_rl/`: cliente, entorno en paralelo, red por ramas con cabezas autorregresivas (`model.py`), PPO (`ppo.py`) `train.py` (ADR 0007, aceptada) y el panel web local `dashboard.py` (ADR 0008). El entrenamiento base desactiva las acciones diplomáticas (`disabledActions`) y paga un bonus decreciente por tribu conquistada (`conquest`, reward.md §9). Siguiente: entrenar contra tribus `Easy` en Britannia, comparar con la heurística y pasar a World. ADRs 0003–0005 siguen en "propuesta".
+**Fases 0, 1 y 2 hechas; Fase 3 escrita y en pruebas** (falta entrenar en el PC del usuario). `bridge/`: observación v2, 24 acciones con máscara, recompensa v2.2 por categorías con presupuesto (terminal > territorio por tramos > ataque > economía > defensa > hitos de construcción > tropas en la zona justa; `docs/specs/reward.md`), registro de eventos (ataques, tribus conquistadas, misiles, construcciones realmente colocadas por tipo) y protocolo v3. `trainer/openfront_rl/`: cliente, entorno en paralelo, red por ramas con cabezas autorregresivas (`model.py`), PPO (`ppo.py`) `train.py` (ADR 0007, aceptada) y el panel web local `dashboard.py` (ADR 0008). El entrenamiento base desactiva las acciones diplomáticas (`disabledActions`) y paga un bonus decreciente por tribu conquistada (`conquest`, reward.md §9). Siguiente: entrenar contra tribus `Easy` en Britannia, comparar con la heurística y pasar a World. ADRs 0003–0005 y 0010 (rollout asíncrono) siguen en "propuesta".
 
 ## Trampa conocida
 `bridge/tsconfig.json` DEBE incluir `../vendor/openfront/packages/*/src/**/*`; si no, `tsx` transpila mal las clases del motor y falla en la primera partida (ver `bridge/README.md`).

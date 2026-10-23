@@ -105,6 +105,7 @@ class Runner:
         self.ep_len = np.zeros(n, int)
         self.ep_invalid = np.zeros(n, int)
         self.kind_counts = np.zeros(len(self.m.space["kinds"]))
+        self.timing = {"net": 0.0, "env": 0.0, "busy": 0.0, "max": 0.0}  # por rollout: red, motor, suma de lat y suma de max(lat)
         self.land_idx = self.m.global_features.index("land_share")
         self.ep_max = np.array([float(r.obs["globals"][0][self.land_idx]) for r in self.results])  # mayor territorio de la partida en curso
 
@@ -120,14 +121,23 @@ class Runner:
         act_mask = np.ones(n, bool) if active is None else np.asarray(active, bool)
         buf.valid[:] = act_mask[None, :]  # los workers pausados no aportan muestras
         invalid = 0
+        self.timing = {"net": 0.0, "env": 0.0, "busy": 0.0, "max": 0.0}
         self.kind_counts[:] = 0  # el histograma de acciones es por actualización, no acumulado
         for t in range(buf.T):
             buf.add_obs(t, self.obs, self.mask)
+            t_a = time.perf_counter()
             act, logp, _, val = self._act(self.obs, self.mask, greedy)
             a = act.cpu().numpy().astype(np.int32)
             buf.action[t], buf.logp[t], buf.value[t] = a, logp.cpu().numpy(), val.cpu().numpy()
             np.add.at(self.kind_counts, a[act_mask, 0], 1)
+            t_b = time.perf_counter()
             results = self.vec.step(a.reshape(n, 1, -1), act_mask)
+            self.timing["net"] += t_b - t_a
+            self.timing["env"] += time.perf_counter() - t_b
+            lat = [self.vec.lat[i] for i in range(n) if act_mask[i]]
+            if lat and max(lat) > 0:
+                self.timing["busy"] += sum(lat) / len(lat)
+                self.timing["max"] += max(lat)
             for i in range(n):
                 if not act_mask[i]:
                     continue
@@ -289,7 +299,7 @@ def train(cfg: dict[str, Any], run_dir: str | Path | None = None, resume: str | 
     workers = cfg["workers"] or default_workers()
     env_cfg = {**cfg["env"], "agents": 1}
     pcfg = PPOConfig.from_dict(cfg["ppo"])
-    vec = VecGame(workers, env_cfg, base_seed=f"{cfg['name']}-{seed}")
+    vec = VecGame(workers, env_cfg, base_seed=f"{cfg['name']}-{seed}", profile=True)
     try:
         m = vec.manifest
         policy = Policy(m, ModelConfig.from_dict(cfg["model"])).to(device)
@@ -379,6 +389,8 @@ def train(cfg: dict[str, Any], run_dir: str | Path | None = None, resume: str | 
                     "update": u, "steps": steps, "episodes_done": st["eps"], "active_workers": int(active.sum()),
                     "time": round(time.time() - t0, 1),
                     "t_rollout": round(t_roll, 2), "t_update": round(time.time() - tu, 2),
+                    "t_net": round(runner.timing["net"], 2), "t_env": round(runner.timing["env"], 2),
+                    "worker_util": round(runner.timing["busy"] / runner.timing["max"], 3) if runner.timing["max"] else None,
                     "reward_scale": rstd.std, "ent_coef": ent_coef, **stats, **info,
                     "noop_frac": float(runner.kind_counts[0] / max(1, runner.kind_counts.sum())),
                     "kind_frac": (runner.kind_counts / max(1, runner.kind_counts.sum())).round(4).tolist(),
@@ -400,7 +412,7 @@ def train(cfg: dict[str, Any], run_dir: str | Path | None = None, resume: str | 
                     print(f"[{u}|{prog}] steps={steps} r/step={row['step_reward_mean']:+.4f} "
                           f"ep_ret={row.get('ep_return', float('nan')):+.3f} ({pr}) ent={stats['ent']:.2f} kl={stats['kl']:.4f} "
                           f"[{evs}] inv={info['invalid_rate']:.2f} noop={row['noop_frac']:.2f} "
-                          f"roll={t_roll:.1f}s upd={row['t_update']:.1f}s", flush=True)
+                          f"roll={t_roll:.1f}s (red {row['t_net']:.1f} motor {row['t_env']:.1f} util {row['worker_util'] or 0:.0%}) upd={row['t_update']:.1f}s", flush=True)
                 if u % cfg["checkpoint_every"] == 0 or done:
                     save(f"ckpt_{u:06d}.pt")
                 st["sps"] = T * int(active.sum()) / max(1e-6, t_roll + row["t_update"])

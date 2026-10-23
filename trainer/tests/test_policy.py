@@ -172,3 +172,16 @@ def test_resolve_device():
     if not torch.cuda.is_available():
         with pytest.raises(RuntimeError, match="GPU"):
             resolve_device("cuda")
+
+
+def test_vecgame_con_perfil_mide_latencias_y_no_cambia_resultados():
+    from openfront_rl.vec_env import VecGame
+    acts = np.zeros((2, 1, 6), np.int32)
+    out = {}
+    for prof in (False, True):
+        with VecGame(2, CFG, base_seed="perfil", profile=prof) as v:
+            v.reset()
+            rs = [v.step(acts) for _ in range(5)]
+            out[prof] = ([r.reward.tolist() for step in rs for r in step], list(v.lat))
+    assert out[False][0] == out[True][0]  # mismos resultados con y sin hilos
+    assert all(x > 0 for x in out[True][1]) and out[False][1] == [0.0, 0.0]
