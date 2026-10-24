@@ -26,6 +26,7 @@ def main(argv: list[str] | None = None) -> None:
     ap.add_argument("--env", action="append", default=[], help="clave=valor, como en train (p. ej. difficulty=Easy)")
     a = ap.parse_args(argv)
     device = resolve_device(a.device)
+    print(f"dispositivo={device}" + (f" ({torch.cuda.get_device_name(device)})" if device.type == "cuda" else ""), flush=True)
     ck = torch.load(a.ckpt, map_location=device, weights_only=False)
     env: dict[str, Any] = {**ck["config"]["env"], **parse_env(a.env)}
     with VecGame(1, {**env, "agents": 1}) as v:
