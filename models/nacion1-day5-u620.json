@@ -119,8 +119,8 @@
       "vf_coef": 1.0
     }
   },
-  "results": "Evaluación sin sesgo (24 partidas, mismas semillas, política estocástica, Britannia + 20 tribus + 1 nación Easy): 11 victorias (46 %, ±20), 1 eliminación, 8 por tiempo, 4 ganó otro; 7,6 tribus y 0,04 naciones conquistadas por partida. En entrenamiento (Day5): 51/101 victorias (50 %), 5 eliminados. Evaluaciones antiguas del entrenamiento (sesgadas): 40, 20, 40, 30 %.",
-  "note": "Mejor modelo contra 1 nación Easy. Entrenar más desde aquí (Day6: nación Medium; Day7: Easy con vf_coef 1.0 y lr_floor 0.3) lo empeoró: Day7 ckpt_000800 gana 1/24 (4 %).",
+  "results": "Evaluación sin sesgo, política estocástica, Britannia + 20 tribus + 1 nación Easy: 26/40 victorias (65 %, ±15; evalckpt, 5 workers, semilla cmp1) y 11/24 (46 %, ±20; primera medición). Conjunto: 37/64 (58 %, ±12). Eliminaciones 5 %; 8,5 tribus y 0,1 naciones conquistadas por partida. Entrenamiento (Day5): 51/101 victorias (50 %). Las evaluaciones del panel de Day1–Day7 tienen sesgo hacia partidas cortas y no son comparables.",
+  "note": "Mejor modelo contra 1 nación Easy. Day8 (lr 3e-5, crítico por defecto, 51 partidas más) no lo mejora: ckpt_000700 gana 21/40 (52 %, ±15) con las mismas semillas. Day6 (nación Medium) y Day7 (vf_coef 1.0, lr 1,5e-4) lo empeoraron (Day7 ckpt_000800: 1/24).",
   "exported": "2026-10-23",
   "size_bytes": 13507343
 }
