@@ -40,3 +40,16 @@ def test_cargar_un_modelo_de_otro_protocolo_falla(tmp_path):
         torch.save({"model": Policy(m).state_dict(), "protocol_version": m.raw["version"] + 1, "config_model": {}}, tmp_path / "x.pt")
         with pytest.raises(ValueError, match="protocolo"):
             load_policy(tmp_path / "x.pt", m)
+
+
+def test_evalckpt_evalua_un_checkpoint(tmp_path):
+    import torch
+    from openfront_rl import NodeGame
+    from openfront_rl.evalckpt import main
+    from openfront_rl.model import ModelConfig, Policy
+    cfg = {"env": {"agents": 1, "bots": 6, "maxTicks": 600}, "model": {}}
+    with NodeGame(cfg["env"]) as g:
+        pol = Policy(g.manifest, ModelConfig.from_dict({}))
+    ck = tmp_path / "c.pt"
+    torch.save({"model": pol.state_dict(), "config": cfg, "update": 7}, ck)
+    main(["--ckpt", str(ck), "--episodes", "2", "--workers", "2", "--device", "cpu"])

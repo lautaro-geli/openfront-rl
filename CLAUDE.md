@@ -30,6 +30,7 @@ Entrenar una política (PyTorch, PPO + self-play) que juegue partidas completas 
 - Medir velocidad: `cd trainer && PYTHONPATH=. python scripts/bench.py --workers 1 5 --map World --bots 400`
 - Panel de control: `cd trainer && python -m openfront_rl.dashboard` → http://127.0.0.1:8765 (lanza, pausa, reanuda, detiene y mata entrenamientos; métricas, workers, arquitectura y metas; ADR 0008, `docs/specs/dashboard.md`)
 - Entrenar: `cd trainer && python -m openfront_rl.train --config configs/v1_ppo_base.yaml` (crea `runs/<nombre>-<semilla>/` con config, `metrics.jsonl` y checkpoints; `--resume runs/.../latest.pt`; `--episodes 50` fija la duración en partidas, `--workers N`, `--env bots=30 --env nations=disabled --env difficulty=Easy --env map=World` cambia el escenario; un run nuevo en una carpeta con datos archiva lo anterior en `anterior-<fecha>/`)
+- Evaluar un checkpoint sin entrenar: `cd trainer && python -m openfront_rl.evalckpt --ckpt runs/<run>/ckpt_000700.pt --episodes 40 --workers 5` (cuota fija por worker; imprime victorias, eliminaciones e IC95 %)
 - Exportar un modelo (solo pesos, ADR 0009): `cd trainer && python -m openfront_rl.export --ckpt runs/<run>/latest.pt --out ../models/<nombre> --results "…" --note "…"`; cargar con `openfront_rl.export.load_policy`. Modelos guardados en `models/` (uno por escenario del currículo: `tribus-day2`, `nacion1-day5-u620`).
 
 ## Convenciones
