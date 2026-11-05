@@ -26,6 +26,7 @@ class PPOConfig:
     ent_coef: float = 0.01
     ent_coef_final: float = 0.001
     target_kl: float = 0.05
+    critic_lr_mult: float = 1.0  # lr del crítico = lr × este factor (cabeza de valor y, con separate_critic, su codificador)
 
     @staticmethod
     def from_dict(d: dict[str, Any] | None) -> "PPOConfig":

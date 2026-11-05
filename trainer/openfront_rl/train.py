@@ -75,6 +75,33 @@ def conquest_weight(cfg: dict[str, Any], progress: float) -> float:
     return float(cq.get("budget", 0)) * decay / max(1, int(cfg["env"].get("bots", 1)))
 
 
+def build_optimizer(policy: Policy, pcfg: PPOConfig) -> torch.optim.Optimizer:
+    """Adam. Con `critic_lr_mult` != 1, el crítico (`value.*` y `enc_v.*`) va en su propio grupo con ese factor de lr."""
+    crit = [p for n, p in policy.named_parameters() if n.startswith(("value.", "enc_v."))]
+    if pcfg.critic_lr_mult == 1.0 or not crit:
+        return torch.optim.Adam(policy.parameters(), lr=pcfg.lr, eps=1e-5)
+    ids = {id(p) for p in crit}
+    rest = [p for p in policy.parameters() if id(p) not in ids]
+    return torch.optim.Adam([{"params": rest, "mult": 1.0}, {"params": crit, "mult": pcfg.critic_lr_mult}], lr=pcfg.lr, eps=1e-5)
+
+
+def should_stop(stop: dict[str, Any] | None, updates_done: int, clipfracs: list[float], wins: list[float]) -> str | None:
+    """Parada automática por alarma de colapso (docs/specs/reward.md no la toca; ver trainer/README.md).
+
+    `stop`: {clipfrac, window, min_updates, win_below, win_window}. Devuelve el motivo o None. Sin `stop` (o clipfrac 0 y win_below 0), nunca para.
+    """
+    sp = stop or {}
+    if updates_done < int(sp.get("min_updates", 30)):
+        return None
+    thr, w = float(sp.get("clipfrac", 0)), int(sp.get("window", 20))
+    if thr > 0 and len(clipfracs) >= w and float(np.mean(clipfracs[-w:])) > thr:
+        return f"clipfrac medio de {w} actualizaciones = {np.mean(clipfracs[-w:]):.3f} > {thr}"
+    wb, ww = float(sp.get("win_below", 0)), int(sp.get("win_window", 30))
+    if wb > 0 and len(wins) >= ww and float(np.mean(wins[-ww:])) < wb:
+        return f"victorias de las últimas {ww} partidas = {np.mean(wins[-ww:]):.2f} < {wb}"
+    return None
+
+
 def stack_obs(results: list[Any]) -> tuple[dict[str, np.ndarray], dict[str, np.ndarray]]:
     """Un agente por partida: [N, ...]."""
     obs = {k: np.stack([r.obs[k][0] for r in results]) for k in OBS_KEYS}
@@ -422,7 +449,7 @@ def train(cfg: dict[str, Any], run_dir: str | Path | None = None, resume: str | 
     try:
         m = vec.manifest
         policy = Policy(m, ModelConfig.from_dict(cfg["model"])).to(device)
-        opt = torch.optim.Adam(policy.parameters(), lr=pcfg.lr, eps=1e-5)
+        opt = build_optimizer(policy, pcfg)
         rstd = RunningStd(pcfg.gamma)
         update0, steps, eps0 = 0, 0, 0
         if resume is not None:
@@ -434,7 +461,10 @@ def train(cfg: dict[str, Any], run_dir: str | Path | None = None, resume: str | 
                 policy.load_state_dict(sd)  # el optimizador se reinicia: cambian los parámetros
             else:
                 policy.load_state_dict(sd)
-                opt.load_state_dict(ck["optimizer"])
+                try:
+                    opt.load_state_dict(ck["optimizer"])
+                except ValueError:  # otros grupos de parámetros (p. ej. critic_lr_mult): el optimizador se reinicia
+                    print("aviso: el optimizador del checkpoint no encaja con los grupos actuales; se reinicia", flush=True)
             rstd.load(ck["reward_std"])
             update0, steps, eps0 = ck["update"], ck["steps"], ck.get("episodes_done", 0)
         wstats, wlogs = WorkerStats(workers), WorkerLogs(run, workers)
@@ -496,9 +526,12 @@ def train(cfg: dict[str, Any], run_dir: str | Path | None = None, resume: str | 
                 progress = st["eps"] / goal if goal else (u - 1) / max(1, total)
                 frac = max(0.0, 1 - progress)
                 for g in opt.param_groups:
-                    g["lr"] = pcfg.lr * max(pcfg.lr_floor, frac)
+                    g["lr"] = pcfg.lr * max(pcfg.lr_floor, frac) * g.get("mult", 1.0)
                 ent_coef = pcfg.ent_coef_final + (pcfg.ent_coef - pcfg.ent_coef_final) * frac
-                runner.conquest_w = conquest_weight(cfg, progress)
+                cq_progress = progress
+                if goal and (cfg.get("conquest") or {}).get("relative"):  # progreso de ESTE run (reward.md §9)
+                    cq_progress = (st["eps"] - eps0) / max(1, goal - eps0)
+                runner.conquest_w = conquest_weight(cfg, cq_progress)
                 tr = time.time()
                 if async_mode:
                     episodes, info = runner.collect_async(buf, active=active, samples=T * int(active.sum()))
@@ -547,6 +580,15 @@ def train(cfg: dict[str, Any], run_dir: str | Path | None = None, resume: str | 
                 if u % cfg["checkpoint_every"] == 0 or done:
                     save(f"ckpt_{u:06d}.pt")
                 st["sps"] = (int(buf.valid.sum()) if async_mode else T * int(active.sum())) / max(1e-6, t_roll + row["t_update"])
+                st.setdefault("cf", []).append(stats["clipfrac"])
+                st.setdefault("wins", []).extend(float(e["won"]) for e in episodes)
+                why = None if done else should_stop(cfg.get("stop"), u - update0, st["cf"], st["wins"])
+                if why:
+                    save(f"ckpt_{u:06d}.pt")
+                    (run / "alarma.txt").write_text(f"Parada automática en la actualización {u}: {why}\n", encoding="utf8")
+                    print(f"ALARMA: {why}; se detiene el run", flush=True)
+                    status("finished")
+                    break
                 if done:
                     status("finished")
                     break

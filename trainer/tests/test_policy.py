@@ -282,3 +282,39 @@ def test_reanudar_con_critico_separado_copia_el_codificador(tmp_path):
     run2 = train(cfg2, tmp_path / "b", resume=run1 / "latest.pt", log=False)
     sd = torch.load(run2 / "latest.pt", weights_only=False)["model"]
     assert any(k.startswith("enc_v.") for k in sd)
+
+
+def test_should_stop_alarmas():
+    from openfront_rl.train import should_stop
+    sp = {"clipfrac": 0.03, "window": 3, "min_updates": 2, "win_below": 0.3, "win_window": 4}
+    assert should_stop(None, 100, [0.9] * 50, [0.0] * 50) is None  # sin configuración nunca para
+    assert should_stop(sp, 1, [0.5] * 10, []) is None  # antes de min_updates
+    assert "clipfrac" in should_stop(sp, 5, [0.01, 0.04, 0.04, 0.04], [])
+    assert should_stop(sp, 5, [0.01] * 5, [1.0, 1.0, 1.0, 1.0]) is None
+    assert "victorias" in should_stop(sp, 5, [0.01] * 5, [1.0, 0.0, 0.0, 0.0])
+    assert should_stop(sp, 5, [0.01] * 5, [0.0, 0.0]) is None  # pocas partidas para juzgar
+
+
+def test_lr_propio_del_critico_y_parada_en_un_run_corto(tmp_path):
+    base = {
+        "name": "humo", "seed": 3, "workers": 2, "rollout_steps": 8, "updates": 3, "checkpoint_every": 1,
+        "eval": {"every": 0, "episodes": 1}, "ppo": {"minibatch": 8, "epochs": 1},
+        "env": {"bots": 5, "maxTicks": 800, "difficulty": "Easy", "nations": "disabled"},
+    }
+    run1 = train(load_config(None, {**base, "updates": 1}), tmp_path / "a", log=False)
+    cfg2 = load_config(None, {**base, "updates": 3, "ppo": {"minibatch": 8, "epochs": 1, "critic_lr_mult": 4.0},
+                              "rollout_steps": 90, "stop": {"win_below": 2.0, "win_window": 1, "min_updates": 1}})
+    run2 = train(cfg2, tmp_path / "b", resume=run1 / "latest.pt", log=False)  # el optimizador no encaja: se reinicia
+    ck = torch.load(run2 / "latest.pt", weights_only=False)
+    mults = sorted(g.get("mult", 1.0) for g in ck["optimizer"]["param_groups"])
+    assert mults == [1.0, 4.0]
+    assert (run2 / "alarma.txt").exists() and ck["update"] == 2  # reanudó en 1 y paró tras 1 actualización nueva
+    grp = {g["mult"]: g["lr"] for g in ck["optimizer"]["param_groups"]}
+    assert abs(grp[4.0] / grp[1.0] - 4.0) < 1e-6
+
+
+def test_bonus_de_conquista_relativo():
+    from openfront_rl.train import conquest_weight
+    cfg = {"conquest": {"budget": 0.2, "until": 0.5, "relative": True}, "env": {"bots": 20}}
+    assert conquest_weight(cfg, 0.69) == 0.0  # progreso absoluto al reanudar: ya apagado
+    assert conquest_weight(cfg, 0.0) > 0.0    # progreso relativo al inicio de este run

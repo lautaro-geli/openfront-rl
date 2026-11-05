@@ -53,7 +53,7 @@ El run se mide en **partidas** (`episodes` en la configuración, `--episodes N` 
 `rollout_mode: sync` (por defecto) avanza los workers al mismo paso; `async` deja que cada uno avance a su ritmo y reúne `rollout_steps × workers` muestras en total, con un tope por worker de `rollout_cap × rollout_steps` (ADR 0010, experimental). `metrics.jsonl` y el log traen `t_net`, `t_env` y `worker_util` (el log: `roll=5.9s (red 0.8 motor 5.0 util 62%)`). `ppo.lr_floor` (0,1 por defecto) fija el mínimo del lr al decaer con el progreso.
 
 ## Versiones de las configs
-Los archivos de `configs/` llevan prefijo de versión (`v1_ppo_base`, `v2_ppo_naciones`, `v3_ppo_naciones_estable`, `v4_ppo_critico`, `v5_ppo_prueba`, `v6`…`v8`, `v9_ppo_largo_rapido`, `v10_ppo_critico_separado`); la siguiente prueba usa `v11_…`. El campo `name:` dentro del YAML no lleva el prefijo (da el nombre del run por defecto y la semilla de las partidas, así que cambiarlo cambiaría las partidas de un run reproducido).
+Los archivos de `configs/` llevan prefijo de versión (`v1_ppo_base`, `v2_ppo_naciones`, `v3_ppo_naciones_estable`, `v4_ppo_critico`, `v5_ppo_prueba`, `v6`…`v8`, `v9_ppo_largo_rapido`, `v10_ppo_critico_separado`, `v11_ppo_lote_grande`, `v12_ppo_kl_estricto`, `v13_ppo_conquista`, `v14_ppo_critico_lr`); la siguiente prueba usa `v15_…`. El campo `name:` dentro del YAML no lleva el prefijo (da el nombre del run por defecto y la semilla de las partidas, así que cambiarlo cambiaría las partidas de un run reproducido).
 
 ## Evaluación sin sesgo
 `evaluate` (train.py) reparte las partidas pedidas en cuotas fijas por worker y cada worker se detiene al cumplirla. Antes se contaban las primeras N partidas en terminar, que son las más cortas (eliminaciones y victorias rápidas), y las evaluaciones de runs anteriores (Day1–Day7) tienen ese sesgo: sobrestiman las eliminaciones. No son comparables con las nuevas.
@@ -61,3 +61,10 @@ Los archivos de `configs/` llevan prefijo de versión (`v1_ppo_base`, `v2_ppo_na
 
 ## Crítico separado
 `model: {separate_critic: true}` da al crítico su propio codificador (`enc_v`), de modo que el gradiente del valor no toca la política. Cuesta una segunda pasada del codificador por paso (más tiempo de red). Al reanudar desde un checkpoint con codificador compartido, `enc_v` arranca copiando `enc` y el optimizador se reinicia. `ppo.gae_lambda` también es configurable (v10 usa 0,97).
+
+## Opciones nuevas (v11–v14)
+- `ppo.critic_lr_mult` (por defecto 1,0): el crítico (`value.*` y, con `separate_critic`, `enc_v.*`) usa `lr × critic_lr_mult`. Al reanudar desde un checkpoint con otros grupos de parámetros, el optimizador se reinicia (se avisa por consola).
+- `ppo.target_kl` (por defecto 0,05): un minibatch corta las épocas si su KL supera `1,5 × target_kl`. Con 0,05 nunca actuó (KL real ≤ 0,007 en Day5–Day10); v12 usa 0,003.
+- `conquest.relative: true`: el bonus por tribu conquistada decae con el progreso de **este** run y no con el total absoluto de `episodes` (`docs/specs/reward.md` §9). Sin esto, al reanudar en 340/490 el bonus ya vale 0.
+- `stop: {clipfrac, window, min_updates, win_below, win_window}`: parada automática por alarma de colapso. Para si la media de `clipfrac` de las últimas `window` actualizaciones supera `clipfrac`, o si las victorias de las últimas `win_window` partidas de entrenamiento caen bajo `win_below` (con al menos `min_updates` actualizaciones del run). Guarda un checkpoint, escribe `alarma.txt` en el run y termina con estado `finished`. Valores de v11–v14: 0,03 / 20 / 30 / 0,3 / 30; calibrados con Day5–Day10 (en esos datos no habría parado Day5 ni Day8, y sí Day7, Day9 y Day10). Son 5 runs: es una calibración dentro de la muestra.
+- Medir la política heurística en el escenario de entrenamiento: `cd bridge && npm run random -- --policy heuristic --bots 20 --nations 1 --difficulty Easy --max-ticks 18000 --seed heur40 --episodes 40` (imprime un RESUMEN al final).

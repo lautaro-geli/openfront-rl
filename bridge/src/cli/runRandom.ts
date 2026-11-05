@@ -1,5 +1,5 @@
 // Juega episodios completos con una política y muestra velocidad y resultado.
-// Uso: npm run random -- [--policy random|heuristic] [--map britannia] [--bots 20] [--seed s1] [--episodes 1] [--max-ticks 6000]
+// Uso: npm run random -- [--policy random|heuristic] [--map britannia] [--bots 20] [--seed s1] [--episodes 1] [--max-ticks 6000] [--nations N|disabled] [--difficulty Easy]
 import { GameMapType } from "@openfront/engine-api/game/GameTypes";
 import { OpenFrontEnv } from "../env";
 import { HeuristicPolicy } from "../heuristicPolicy";
@@ -7,7 +7,7 @@ import { RandomPolicy } from "../randomPolicy";
 import type { EnvConfig } from "../types";
 
 function parse(argv: string[]) {
-  const o = { policy: "random", map: "britannia", bots: 20, seed: "random-1", episodes: 1, maxTicks: 6000 };
+  const o = { policy: "random", map: "britannia", bots: 20, seed: "random-1", episodes: 1, maxTicks: 6000, nations: undefined as string | undefined, difficulty: undefined as string | undefined };
   for (let i = 0; i < argv.length; i++) {
     const v = argv[i + 1];
     switch (argv[i]) {
@@ -17,6 +17,8 @@ function parse(argv: string[]) {
       case "--seed": o.seed = v; i++; break;
       case "--episodes": o.episodes = parseInt(v, 10); i++; break;
       case "--max-ticks": o.maxTicks = parseInt(v, 10); i++; break;
+      case "--nations": o.nations = v; i++; break;
+      case "--difficulty": o.difficulty = v; i++; break;
       default: throw new Error(`argumento desconocido: ${argv[i]}`);
     }
   }
@@ -33,7 +35,10 @@ async function main() {
     bots: o.bots,
     maxTicks: o.maxTicks,
   };
+  if (o.nations !== undefined) cfg.nations = o.nations === "disabled" ? "disabled" : /^\d+$/.test(o.nations) ? parseInt(o.nations, 10) : "default";
+  if (o.difficulty !== undefined) cfg.difficulty = o.difficulty as EnvConfig["difficulty"];
   const env = await OpenFrontEnv.create(cfg);
+  let wins = 0, elim = 0, trunc = 0;
   for (let ep = 0; ep < o.episodes; ep++) {
     const seed = `${o.seed}-${ep}`;
     const policy = o.policy === "heuristic" ? new HeuristicPolicy(seed, env.cfg.grid) : new RandomPolicy(seed, env.cfg.grid);
@@ -50,6 +55,7 @@ async function main() {
       total += r.reward;
       if (r.info.invalidAction) invalid++;
       if (r.terminated || r.truncated) {
+        if (r.truncated) trunc++; else if (r.info.won) wins++; else if (r.info.eliminated) elim++;
         const secs = (performance.now() - t0) / 1000;
         const ticks = r.info.tick - tick0;
         console.log(
@@ -62,6 +68,7 @@ async function main() {
     }
   }
   env.close();
+  console.log(`[${o.policy}] RESUMEN: ${wins}/${o.episodes} victorias, ${elim} eliminado, ${trunc} truncadas`);
 }
 
 main().catch((e) => {
