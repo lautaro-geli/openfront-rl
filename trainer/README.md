@@ -62,6 +62,13 @@ Los archivos de `configs/` llevan prefijo de versión (`v1_ppo_base`, `v2_ppo_na
 ## Crítico separado
 `model: {separate_critic: true}` da al crítico su propio codificador (`enc_v`), de modo que el gradiente del valor no toca la política. Cuesta una segunda pasada del codificador por paso (más tiempo de red). Al reanudar desde un checkpoint con codificador compartido, `enc_v` arranca copiando `enc` y el optimizador se reinicia. `ppo.gae_lambda` también es configurable (v10 usa 0,97).
 
+## Diagnóstico: señal del gradiente (`gradnoise`)
+`python -m openfront_rl.gradnoise --ckpt runs/Day8/latest.pt --batches 40 --workers 5` juega 40 lotes con la política congelada (como el entrenamiento: `rollout_steps` × workers muestras, GAE y ventajas normalizadas por lote) y calcula el gradiente de la pérdida de política de cada lote. Imprime:
+- `coseno_medio`: coseno medio entre los gradientes de lotes distintos (≈ 0: cada lote apunta a otro lado, es ruido).
+- `b_noise_muestras` / `b_noise_partidas`: escala de ruido del gradiente B_simple = tr(Σ)/|G|² (McCandlish et al. 2018, arXiv 1812.06162). Es el lote a partir del cual agrandarlo deja de ayudar. Si es ≫ 640 muestras, cada actualización es casi ruido y hay que agrandar el lote (hipótesis #1 de `claude/03-hipotesis-de-fallo.md`).
+- `b_noise_mitad1/2`: la misma estimación con cada mitad de los lotes (estabilidad).
+Los lotes consecutivos salen de las mismas partidas en curso, así que es una estimación aproximada. No modifica el checkpoint.
+
 ## Opciones nuevas (v11–v14)
 - `ppo.critic_lr_mult` (por defecto 1,0): el crítico (`value.*` y, con `separate_critic`, `enc_v.*`) usa `lr × critic_lr_mult`. Al reanudar desde un checkpoint con otros grupos de parámetros, el optimizador se reinicia (se avisa por consola).
 - `ppo.target_kl` (por defecto 0,05): un minibatch corta las épocas si su KL supera `1,5 × target_kl`. Con 0,05 nunca actuó (KL real ≤ 0,007 en Day5–Day10); v12 usa 0,003.
