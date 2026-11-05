@@ -253,3 +253,32 @@ def test_evaluate_juega_exactamente_las_partidas_pedidas():
     pol = Policy(m, ModelConfig.from_dict({})).eval()
     out = evaluate(pol, CFG, workers=2, episodes=3, seed="ev", device=torch.device("cpu"))
     assert out["eval_episodes"] == 3.0 and 0.0 <= out["eval_won"] <= 1.0
+
+
+def test_critico_separado_no_toca_el_codificador_de_la_politica(policy_and_rows):
+    rows = policy_and_rows[1]
+    obs, mask = rows[0][0], rows[0][1]
+    with NodeGame(CFG) as g:
+        man = g.manifest
+    torch.manual_seed(1)
+    p = Policy(man, ModelConfig(separate_critic=True))
+    assert p.enc_v is not None
+    ob, mk = to_tensors(obs, mask)
+    _, _, _, val = p(ob, mk)
+    val.sum().backward()
+    assert all(q.grad is None or float(q.grad.abs().sum()) == 0.0 for q in p.enc.parameters())
+    assert any(q.grad is not None and float(q.grad.abs().sum()) > 0 for q in p.enc_v.parameters())
+    assert torch.allclose(p.values(ob), p(ob, mk)[3])
+
+
+def test_reanudar_con_critico_separado_copia_el_codificador(tmp_path):
+    base = {
+        "name": "humo", "seed": 3, "workers": 2, "rollout_steps": 8, "updates": 1, "checkpoint_every": 1,
+        "eval": {"every": 0, "episodes": 1}, "ppo": {"minibatch": 8, "epochs": 1},
+        "env": {"bots": 5, "maxTicks": 800, "difficulty": "Easy", "nations": "disabled"},
+    }
+    run1 = train(load_config(None, base), tmp_path / "a", log=False)
+    cfg2 = load_config(None, {**base, "updates": 2, "model": {"separate_critic": True}})
+    run2 = train(cfg2, tmp_path / "b", resume=run1 / "latest.pt", log=False)
+    sd = torch.load(run2 / "latest.pt", weights_only=False)["model"]
+    assert any(k.startswith("enc_v.") for k in sd)

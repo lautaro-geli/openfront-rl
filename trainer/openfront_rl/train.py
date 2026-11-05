@@ -427,8 +427,14 @@ def train(cfg: dict[str, Any], run_dir: str | Path | None = None, resume: str | 
         update0, steps, eps0 = 0, 0, 0
         if resume is not None:
             ck = torch.load(resume, map_location=device, weights_only=False)
-            policy.load_state_dict(ck["model"])
-            opt.load_state_dict(ck["optimizer"])
+            sd = ck["model"]
+            if policy.enc_v is not None and not any(k.startswith("enc_v.") for k in sd):
+                # Checkpoint con codificador compartido → crítico separado: enc_v arranca copiando enc y luego diverge.
+                sd = {**sd, **{"enc_v." + k[4:]: v for k, v in sd.items() if k.startswith("enc.")}}
+                policy.load_state_dict(sd)  # el optimizador se reinicia: cambian los parámetros
+            else:
+                policy.load_state_dict(sd)
+                opt.load_state_dict(ck["optimizer"])
             rstd.load(ck["reward_std"])
             update0, steps, eps0 = ck["update"], ck["steps"], ck.get("episodes_done", 0)
         wstats, wlogs = WorkerStats(workers), WorkerLogs(run, workers)

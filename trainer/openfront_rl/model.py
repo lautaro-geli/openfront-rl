@@ -34,6 +34,7 @@ class ModelConfig:
     key_dim: int = 32
     act_dim: int = 256
     kind_emb: int = 32
+    separate_critic: bool = False  # True: el crítico tiene su propio codificador (no comparte capas con la política)
 
     @staticmethod
     def from_dict(d: dict[str, Any] | None) -> "ModelConfig":
@@ -208,6 +209,7 @@ class Policy(nn.Module):
         self.spec = ActionSpec(m.space)
         c = self.cfg
         self.enc = Encoder(m, c)
+        self.enc_v = Encoder(m, c) if c.separate_critic else None
         self.kind_head = nn.Linear(c.core, self.spec.n_kinds)
         self.kind_emb = nn.Embedding(self.spec.n_kinds, c.kind_emb)
         self.act = nn.Sequential(nn.Linear(c.core + c.kind_emb, c.act_dim), nn.GELU(), nn.Linear(c.act_dim, c.act_dim), nn.GELU())
@@ -229,8 +231,12 @@ class Policy(nn.Module):
         """mask [B,G,N]; idx [B] (−1 = ninguno) → [B,N]."""
         return mask[torch.arange(mask.shape[0], device=mask.device), idx.clamp(min=0)]
 
+    def _value(self, ob: dict[str, Tensor], h: Tensor) -> Tensor:
+        """Valor desde `h` (codificador compartido) o desde el codificador propio del crítico."""
+        return self.value(h if self.enc_v is None else self.enc_v(ob)["h"])[:, 0]
+
     def values(self, ob: dict[str, Tensor]) -> Tensor:
-        return self.value(self.enc(ob)["h"])[:, 0]
+        return self._value(ob, self.enc(ob)["h"] if self.enc_v is None else None)
 
     def forward(self, ob: dict[str, Tensor], mask: dict[str, Tensor], action: Tensor | None = None,
                 greedy: bool = False) -> tuple[Tensor, Tensor, Tensor, Tensor]:
@@ -281,7 +287,7 @@ class Policy(nn.Module):
         act = torch.stack([kind, row, cell, frac, typ, aux], -1)
         logp = lp_k + lp_p + lp_u + lp_a + lp_b + lp_n + lp_c + lp_f + lp_x
         ent = en_k + en_p + en_u + en_a + en_b + en_n + en_c + en_f + en_x
-        return act, logp, ent, self.value(h)[:, 0]
+        return act, logp, ent, self._value(ob, h)
 
 
 def to_tensors(obs: dict[str, Any], mask: dict[str, Any], device: torch.device | str = "cpu") -> tuple[dict[str, Tensor], dict[str, Tensor]]:
