@@ -293,6 +293,12 @@ def test_should_stop_alarmas():
     assert should_stop(sp, 5, [0.01] * 5, [1.0, 1.0, 1.0, 1.0]) is None
     assert "victorias" in should_stop(sp, 5, [0.01] * 5, [1.0, 0.0, 0.0, 0.0])
     assert should_stop(sp, 5, [0.01] * 5, [0.0, 0.0]) is None  # pocas partidas para juzgar
+    se = {"eval_below": 0.45, "eval_count": 2, "min_updates": 2}
+    assert should_stop(se, 5, [], [], [0.6, 0.3]) is None  # una sola evaluación baja no para
+    assert should_stop(se, 5, [], [], [0.3]) is None  # pocas evaluaciones
+    assert should_stop(se, 1, [], [], [0.3, 0.3]) is None  # antes de min_updates
+    assert "evaluaciones" in should_stop(se, 5, [], [], [0.6, 0.4, 0.3])
+    assert should_stop(se, 5, [], [], None) is None  # sin evaluaciones (every: 0)
 
 
 def test_lr_propio_del_critico_y_parada_en_un_run_corto(tmp_path):
@@ -318,3 +324,16 @@ def test_bonus_de_conquista_relativo():
     cfg = {"conquest": {"budget": 0.2, "until": 0.5, "relative": True}, "env": {"bots": 20}}
     assert conquest_weight(cfg, 0.69) == 0.0  # progreso absoluto al reanudar: ya apagado
     assert conquest_weight(cfg, 0.0) > 0.0    # progreso relativo al inicio de este run
+
+
+def test_parada_por_evaluacion_en_un_run_corto(tmp_path):
+    cfg = load_config(None, {
+        "name": "humo", "seed": 3, "workers": 2, "rollout_steps": 8, "updates": 4, "checkpoint_every": 1,
+        "eval": {"every": 1, "episodes": 2}, "ppo": {"minibatch": 8, "epochs": 1},
+        "env": {"bots": 5, "maxTicks": 800, "difficulty": "Easy", "nations": "disabled"},
+        "stop": {"eval_below": 2.0, "eval_count": 1, "min_updates": 1},
+    })
+    run = train(cfg, tmp_path / "e", log=False)
+    rows = [json.loads(x) for x in (run / "metrics.jsonl").read_text().splitlines()]
+    assert len(rows) == 1 and "eval_won" in rows[0]  # evaluó en la actualización 1 y paró
+    assert "evaluaciones" in (run / "alarma.txt").read_text(encoding="utf8")

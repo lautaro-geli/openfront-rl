@@ -85,14 +85,19 @@ def build_optimizer(policy: Policy, pcfg: PPOConfig) -> torch.optim.Optimizer:
     return torch.optim.Adam([{"params": rest, "mult": 1.0}, {"params": crit, "mult": pcfg.critic_lr_mult}], lr=pcfg.lr, eps=1e-5)
 
 
-def should_stop(stop: dict[str, Any] | None, updates_done: int, clipfracs: list[float], wins: list[float]) -> str | None:
+def should_stop(stop: dict[str, Any] | None, updates_done: int, clipfracs: list[float], wins: list[float],
+                evals: list[float] | None = None) -> str | None:
     """Parada automática por alarma de colapso (docs/specs/reward.md no la toca; ver trainer/README.md).
 
-    `stop`: {clipfrac, window, min_updates, win_below, win_window}. Devuelve el motivo o None. Sin `stop` (o clipfrac 0 y win_below 0), nunca para.
+    `stop`: {clipfrac, window, min_updates, win_below, win_window, eval_below, eval_count}. Devuelve el motivo o None.
+    Sin `stop` (o clipfrac 0, win_below 0 y eval_below 0), nunca para. `evals`: victorias de cada evaluación sin sesgo dentro del run.
     """
     sp = stop or {}
     if updates_done < int(sp.get("min_updates", 30)):
         return None
+    eb, ec = float(sp.get("eval_below", 0)), int(sp.get("eval_count", 2))
+    if eb > 0 and evals and len(evals) >= ec and all(e < eb for e in evals[-ec:]):
+        return f"las últimas {ec} evaluaciones sin sesgo dieron " + ", ".join(f"{e:.2f}" for e in evals[-ec:]) + f" (< {eb})"
     thr, w = float(sp.get("clipfrac", 0)), int(sp.get("window", 20))
     if thr > 0 and len(clipfracs) >= w and float(np.mean(clipfracs[-w:])) > thr:
         return f"clipfrac medio de {w} actualizaciones = {np.mean(clipfracs[-w:]):.3f} > {thr}"
@@ -567,6 +572,7 @@ def train(cfg: dict[str, Any], run_dir: str | Path | None = None, resume: str | 
                 ev = cfg["eval"]
                 if ev["every"] and u % ev["every"] == 0:
                     row |= evaluate(policy, env_cfg, workers, ev["episodes"], f"{cfg['name']}-{seed}-{u}", device)
+                    st.setdefault("evals", []).append(float(row["eval_won"]))
                 mf.write(json.dumps(row) + "\n")
                 mf.flush()
                 if log:
@@ -582,7 +588,7 @@ def train(cfg: dict[str, Any], run_dir: str | Path | None = None, resume: str | 
                 st["sps"] = (int(buf.valid.sum()) if async_mode else T * int(active.sum())) / max(1e-6, t_roll + row["t_update"])
                 st.setdefault("cf", []).append(stats["clipfrac"])
                 st.setdefault("wins", []).extend(float(e["won"]) for e in episodes)
-                why = None if done else should_stop(cfg.get("stop"), u - update0, st["cf"], st["wins"])
+                why = None if done else should_stop(cfg.get("stop"), u - update0, st["cf"], st["wins"], st.get("evals"))
                 if why:
                     save(f"ckpt_{u:06d}.pt")
                     (run / "alarma.txt").write_text(f"Parada automática en la actualización {u}: {why}\n", encoding="utf8")
