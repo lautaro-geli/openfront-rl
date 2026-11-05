@@ -78,6 +78,8 @@ function nav() {
 const COLORS = ["--c1","--c2","--c3","--c4","--c5","--c6"];
 function css(v) { return getComputedStyle(document.documentElement).getPropertyValue(v).trim(); }
 function smooth(pts, w = 5) { return pts.map((p, i) => { const s = pts.slice(Math.max(0, i - w + 1), i + 1); return {x: p.x, y: s.reduce((a, q) => a + q.y, 0) / s.length}; }); }
+const fd = (v, top) => fmt(v, top < 0.05 ? 4 : top < 0.5 ? 3 : Math.abs(v) < 10 ? 2 : 0);
+function nice(v) { const e = Math.pow(10, Math.floor(Math.log10(v))), f = v / e; return (f <= 1 ? 1 : f <= 2 ? 2 : f <= 2.5 ? 2.5 : f <= 5 ? 5 : 10) * e; }
 function chart(title, series, opts = {}) {
   const cv = h("canvas"), box = h("div", {class: "card"}, h("h2", {}, title), cv);
   const leg = h("div", {class: "legend"}); box.append(leg);
@@ -88,14 +90,16 @@ function draw(cv, leg, series, opts) {
   const dpr = devicePixelRatio || 1, W = cv.clientWidth, H = cv.clientHeight; cv.width = W * dpr; cv.height = H * dpr;
   const g = cv.getContext("2d"); g.scale(dpr, dpr); g.clearRect(0, 0, W, H);
   const all = series.map(s => ({...s, pts: (opts.raw ? s.pts : smooth(s.pts))})).filter(s => s.pts.length);
-  leg.replaceChildren(...series.map((s, i) => h("span", {}, h("i", {style: "background:" + css(COLORS[i % 6])}), s.name)));
-  if (!all.length) { g.fillStyle = css("--mut"); g.font = "13px system-ui"; g.fillText("sin datos todavía", 12, 24); return; }
+  const setLeg = y1 => leg.replaceChildren(...series.map((s, i) => { const sm = all.find(q => q.name === s.name), v = sm ? sm.pts[sm.pts.length - 1].y : null; return h("span", {}, h("i", {style: "background:" + css(COLORS[i % 6])}), s.name + (v === null ? "" : " · " + fd(v, y1))); }));
+  if (!all.length) { setLeg(1); g.fillStyle = css("--mut"); g.font = "13px system-ui"; g.fillText("sin datos todavía", 12, 24); return; }
   let xs = all.flatMap(s => s.pts.map(p => p.x)), ys = all.flatMap(s => s.pts.map(p => p.y));
-  let x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(...ys, opts.zero ? 0 : Infinity), y1 = Math.max(...ys);
-  if (x0 === x1) x1 = x0 + 1; if (y0 === y1) { y0 -= 1; y1 += 1; }
+  let x0 = Math.min(...xs), x1 = Math.max(...xs), y0 = Math.min(0, ...ys), y1 = Math.max(...ys);
+  if (x0 === x1) x1 = x0 + 1;
+  y1 = y1 > 0 ? nice(y1) : 0; y0 = y0 < 0 ? -nice(-y0) : 0; if (y1 <= y0) y1 = y0 + 1;
+  setLeg(y1);
   const L = 46, R = 8, T = 8, B = 20, px = x => L + (x - x0) / (x1 - x0) * (W - L - R), py = y => H - B - (y - y0) / (y1 - y0) * (H - T - B);
   g.strokeStyle = css("--line"); g.fillStyle = css("--mut"); g.font = "11px system-ui"; g.lineWidth = 1;
-  for (let i = 0; i <= 4; i++) { const y = y0 + (y1 - y0) * i / 4; g.beginPath(); g.moveTo(L, py(y)); g.lineTo(W - R, py(y)); g.stroke(); g.fillText(fmt(y, Math.abs(y) < 10 ? 2 : 0), 4, py(y) + 4); }
+  for (let i = 0; i <= 4; i++) { const y = y0 + (y1 - y0) * i / 4; g.beginPath(); g.moveTo(L, py(y)); g.lineTo(W - R, py(y)); g.stroke(); g.fillText(fd(y, y1), 4, py(y) + 4); }
   g.fillText(fmt(x0, 0), L, H - 5); g.fillText("actualización " + fmt(x1, 0), W - 120, H - 5);
   all.forEach((s, i) => { g.strokeStyle = css(COLORS[series.findIndex(q => q.name === s.name) % 6]); g.lineWidth = 2; g.beginPath(); s.pts.forEach((p, j) => j ? g.lineTo(px(p.x), py(p.y)) : g.moveTo(px(p.x), py(p.y))); g.stroke(); if (s.pts.length < 40) { g.fillStyle = g.strokeStyle; s.pts.forEach(p => { g.beginPath(); g.arc(px(p.x), py(p.y), 2.5, 0, 7); g.fill(); }); } });
 }
@@ -206,11 +210,16 @@ async function viewRun(m) {
     h("div", {class: "card"}, h("h2", {}, "Workers (tocá uno para ver el detalle y su registro; pausar se aplica al empezar la próxima actualización)"), workers.length ? h("div", {class: "row"}, workers) : h("span", {class: "muted"}, "sin datos todavía")),
     h("div", {class: "charts"},
       chart("Retorno por episodio (suma de componentes)", [col("ep_return", "retorno")]),
-      chart("Retorno por componente", ["territory", "attack", "economy", "defense", "milestones", "troops", "conquest", "terminal"].map((k, i) => col("ep_part_" + k, ["territorio", "ataque", "economía", "defensa", "hitos", "tropas", "tribus (bonus)", "fin"][i]))),
-      chart("Conducta por episodio", ents.map((k, i) => col(k, labels[i])), {zero: true}),
-      chart("Entropía y KL", [col("ent", "entropía"), col("kl", "KL")]),
+      chart("Retorno: territorio y fin de partida", [["territory", "territorio"], ["terminal", "fin"]].map(([k, l]) => col("ep_part_" + k, l))),
+      chart("Retorno: componentes menores", [["attack", "ataque"], ["economy", "economía"], ["defense", "defensa"], ["milestones", "hitos"], ["troops", "tropas"], ["conquest", "tribus (bonus)"]].map(([k, l]) => col("ep_part_" + k, l))),
+      chart("Ataques por episodio", [col("ep_ev_attack_orders", "ataques"), col("ep_ev_attack_tribe_orders", "ataques a tribus")]),
+      chart("Tribus conquistadas por episodio", [col("ep_ev_tribes_conquered", "tribus conquistadas")]),
+      chart("Construcciones por episodio", [col("ep_ev_built_city", "ciudades"), col("ep_ev_built_port", "puertos"), col("ep_ev_built_factory", "fábricas"), col("ep_ev_built_post", "puestos")]),
+      chart("Órdenes de construir y misiles", [col("ep_ev_build_orders", "órdenes de construir"), col("ep_ev_nukes_launched", "misiles")]),
+      chart("Entropía", [col("ent", "entropía")]),
+      chart("KL", [col("kl", "KL")]),
       chart("Ventaja: explicada por el crítico", [col("expl_var", "varianza explicada")]),
-      chart("Velocidad (pasos/s)", [{name: "pasos/s", pts: sp}], {zero: true})),
+      chart("Velocidad (pasos/s)", [{name: "pasos/s", pts: sp}])),
     h("div", {class: "card"}, h("h2", {}, "Salida del proceso"), h("pre", {}, log.log || "(vacío)")));
 }
 
@@ -240,10 +249,17 @@ async function viewMetas(m) {
       h("div", {class: "t"}, g.title, h("small", {}, `${g.metric}${g.window ? ` (media de ${g.window})` : ""} ${g.op} ${g.value} · mejor: ${fmt(g.best, 3)}`)), h("div", {class: "bar"}, h("i", {style: `width:${prog(g)}%;background:${g.done ? css("--ok") : css("--acc")}`}))))));
 }
 
+let lastTab = null;
 async function render() {
   const m = $("#main");
+  const same = lastTab === tab; lastTab = tab;
+  const sy = window.scrollY;
+  // Posición de cada registro (<pre>): si estaba al final, sigue al final; si no, conserva dónde estaba.
+  const snap = same ? [...m.querySelectorAll("pre")].map(p => ({top: p.scrollTop, end: p.scrollTop + p.clientHeight >= p.scrollHeight - 6})) : [];
   try { await ({procesos: viewProcesos, run: viewRun, arq: viewArq, metas: viewMetas}[tab])(m); }
   catch (e) { m.replaceChildren(h("div", {class: "card err"}, "Error: " + e.message)); }
+  const restore = () => { m.querySelectorAll("pre").forEach((p, i) => { const q = snap[i]; p.scrollTop = !q || q.end ? p.scrollHeight : q.top; }); if (same) window.scrollTo(0, sy); };
+  restore(); requestAnimationFrame(() => requestAnimationFrame(restore));
 }
 nav(); render();
 const dirty = () => tab === "procesos" && [...document.querySelectorAll("form input, form select")].some(e => e.type === "checkbox" ? e.checked : e.tagName === "INPUT" && e.value !== "");
