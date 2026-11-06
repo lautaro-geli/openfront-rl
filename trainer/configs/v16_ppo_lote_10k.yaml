@@ -1,5 +1,5 @@
-# v16 (lote grande): 10.240 muestras por actualización (5 workers × 2048) y minibatch 2048 (en trozos de 512 por la memoria de la GPU).
-# Desde Day8/latest.pt (partida 340), ~870 partidas nuevas (~100 actualizaciones, ~4 h 40 min con las evaluaciones).
+# v16 (lote grande): 10.240 muestras por actualización (4 workers × 2560) y minibatch 2048 (en trozos de 512 por la memoria de la GPU).
+# Desde Day8/latest.pt (partida 340), ~870 partidas nuevas (~100 actualizaciones, ~5 h con las evaluaciones).
 # Medido (gradnoise, nube): con 640 muestras el gradiente es ~95–97 % ruido; B_noise ≈ 12–21 mil muestras. Hipótesis #1/#2 de 03-hipotesis.
 # Mismo punto de partida y misma receta que Day9/Day11 (lr 5e-5, sin bonus de conquista, ent_coef inicial ~0,0038); el cambio es el tamaño del
 # minibatch (128/256 → 2048): 16× menos pasos de gradiente por partida, cada uno con ~16× menos ruido relativo.
@@ -10,9 +10,9 @@
 name: ppo_v16
 seed: 0
 device: auto          # auto = GPU (CUDA) si existe, si no CPU; cpu o cuda para forzar
-workers: 5          # 5 de los 6 núcleos (la PC queda justa: no usarla mientras entrena)
+workers: 4          # 4 de los 6 núcleos: menos carga y ruido de ventiladores durante la noche (Day7: ~80 pasos/s con 4)
 low_priority: false  # prioridad normal: el motor no cede CPU a otros procesos
-rollout_steps: 2048    # 5 workers × 2048 = 10.240 muestras por actualización (~1,2 GB de RAM)
+rollout_steps: 2560    # 4 workers × 2560 = 10.240 muestras por actualización (~1,2 GB de RAM)
 updates: 1000
 rollout_mode: sync    # el asíncrono no ganó velocidad (Day6, ADR 0010): la red serializada era el límite
 episodes: 1210        # total absoluto: Day8 terminó en la partida 340, así que son ~870 partidas nuevas
