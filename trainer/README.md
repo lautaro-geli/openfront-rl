@@ -53,7 +53,7 @@ El run se mide en **partidas** (`episodes` en la configuración, `--episodes N` 
 `rollout_mode: sync` (por defecto) avanza los workers al mismo paso; `async` deja que cada uno avance a su ritmo y reúne `rollout_steps × workers` muestras en total, con un tope por worker de `rollout_cap × rollout_steps` (ADR 0010, experimental). `metrics.jsonl` y el log traen `t_net`, `t_env` y `worker_util` (el log: `roll=5.9s (red 0.8 motor 5.0 util 62%)`). `ppo.lr_floor` (0,1 por defecto) fija el mínimo del lr al decaer con el progreso.
 
 ## Versiones de las configs
-Los archivos de `configs/` llevan prefijo de versión (`v1_ppo_base`, `v2_ppo_naciones`, `v3_ppo_naciones_estable`, `v4_ppo_critico`, `v5_ppo_prueba`, `v6`…`v8`, `v9_ppo_largo_rapido`, `v10_ppo_critico_separado`, `v11_ppo_lote_grande`, `v12_ppo_kl_estricto`, `v13_ppo_conquista`, `v14_ppo_critico_lr`, `v15_ppo_desde_day5`); la siguiente prueba usa `v16_…`. El campo `name:` dentro del YAML no lleva el prefijo (da el nombre del run por defecto y la semilla de las partidas, así que cambiarlo cambiaría las partidas de un run reproducido).
+Los archivos de `configs/` llevan prefijo de versión (`v1_ppo_base`, `v2_ppo_naciones`, `v3_ppo_naciones_estable`, `v4_ppo_critico`, `v5_ppo_prueba`, `v6`…`v8`, `v9_ppo_largo_rapido`, `v10_ppo_critico_separado`, `v11_ppo_lote_grande`, `v12_ppo_kl_estricto`, `v13_ppo_conquista`, `v14_ppo_critico_lr`, `v15_ppo_desde_day5`, `v16_ppo_lote_10k`); la siguiente prueba usa `v17_…`. El campo `name:` dentro del YAML no lleva el prefijo (da el nombre del run por defecto y la semilla de las partidas, así que cambiarlo cambiaría las partidas de un run reproducido).
 
 ## Evaluación sin sesgo
 `evaluate` (train.py) reparte las partidas pedidas en cuotas fijas por worker y cada worker se detiene al cumplirla. Antes se contaban las primeras N partidas en terminar, que son las más cortas (eliminaciones y victorias rápidas), y las evaluaciones de runs anteriores (Day1–Day7) tienen ese sesgo: sobrestiman las eliminaciones. No son comparables con las nuevas.
@@ -70,6 +70,7 @@ Los archivos de `configs/` llevan prefijo de versión (`v1_ppo_base`, `v2_ppo_na
 Los lotes consecutivos salen de las mismas partidas en curso, así que es una estimación aproximada. No modifica el checkpoint.
 
 ## Opciones nuevas (v11–v14)
+- `ppo.chunk` (por defecto 0): si es > 0, cada minibatch se procesa en trozos de ese tamaño y el gradiente se acumula antes del paso del optimizador. Es el mismo paso que con el minibatch entero, con menos memoria de GPU (~4 MB por muestra: 512 → ~2 GB). Lo usa v16 (minibatch 2048).
 - `ppo.critic_lr_mult` (por defecto 1,0): el crítico (`value.*` y, con `separate_critic`, `enc_v.*`) usa `lr × critic_lr_mult`. Al reanudar desde un checkpoint con otros grupos de parámetros, el optimizador se reinicia (se avisa por consola).
 - `ppo.target_kl` (por defecto 0,05): un minibatch corta las épocas si su KL supera `1,5 × target_kl`. Con 0,05 nunca actuó (KL real ≤ 0,007 en Day5–Day10); v12 usa 0,003.
 - `conquest.relative: true`: el bonus por tribu conquistada decae con el progreso de **este** run y no con el total absoluto de `episodes` (`docs/specs/reward.md` §9). Sin esto, al reanudar en 340/490 el bonus ya vale 0.

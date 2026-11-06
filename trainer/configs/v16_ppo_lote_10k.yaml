@@ -1,0 +1,68 @@
+# v16 (lote grande): 10.240 muestras por actualización (5 workers × 2048) y minibatch 2048 (en trozos de 512 por la memoria de la GPU).
+# Desde Day8/latest.pt (partida 340), ~870 partidas nuevas (~100 actualizaciones, ~4 h 40 min con las evaluaciones).
+# Medido (gradnoise, nube): con 640 muestras el gradiente es ~95–97 % ruido; B_noise ≈ 12–21 mil muestras. Hipótesis #1/#2 de 03-hipotesis.
+# Mismo punto de partida y misma receta que Day9/Day11 (lr 5e-5, sin bonus de conquista, ent_coef inicial ~0,0038); el cambio es el tamaño del
+# minibatch (128/256 → 2048): 16× menos pasos de gradiente por partida, cada uno con ~16× menos ruido relativo.
+# Lectura: si NO colapsa en ~870 partidas (Day9–Day14 colapsaron en 30–160), el ruido era la causa. Si colapsa igual, la señal está sesgada
+# (crítico, γ, recompensa) y el siguiente paso es el crítico (GAE desacoplado). Ojo: en teoría, lote ×16 con el mismo lr se parece a lr ÷16
+# con el lote chico; esta prueba no separa esas dos lecturas, pero sí separa "ruido" de "sesgo".
+# Evaluación sin sesgo cada 20 actualizaciones (40 partidas) y parada si dos seguidas dan < 45 %.
+name: ppo_v16
+seed: 0
+device: auto          # auto = GPU (CUDA) si existe, si no CPU; cpu o cuda para forzar
+workers: 5          # 5 de los 6 núcleos (la PC queda justa: no usarla mientras entrena)
+low_priority: false  # prioridad normal: el motor no cede CPU a otros procesos
+rollout_steps: 2048    # 5 workers × 2048 = 10.240 muestras por actualización (~1,2 GB de RAM)
+updates: 1000
+rollout_mode: sync    # el asíncrono no ganó velocidad (Day6, ADR 0010): la red serializada era el límite
+episodes: 1210        # total absoluto: Day8 terminó en la partida 340, así que son ~870 partidas nuevas
+checkpoint_every: 10
+eval:
+  every: 20         # cada ~175 partidas; coincide con un checkpoint (checkpoint_every 10)
+  episodes: 40      # cuota fija por worker (sin sesgo); ±15 puntos
+env:
+  map: Britannia
+  bots: 20
+  nations: 1
+  difficulty: Easy
+  decisionInterval: 10
+  maxTicks: 18000
+  grid: {h: 32, w: 64}
+  samples: 4
+  rewardTerritoryWeight: 0.40
+  rewardAttackWeight: 0.08
+  rewardEconomyWeight: 0.04
+  rewardDefenseWeight: 0.05
+  rewardMilestonesWeight: 0.06   # primera ciudad, puerto y fábrica (reward.md §2b)
+  rewardTroopsWeight: 0.05       # tropas en la zona justa, ~42 % del máximo (reward.md §2c)
+  territoryKnee: 0.15            # el primer 15 % del mapa paga el 35 % del presupuesto de territorio (reward.md §2)
+  territoryKneeShare: 0.35
+  # Sin diplomacia ni comercio: contra tribus no aportan (docs/specs/actions.md §4b).
+  disabledActions: [alliance_request, alliance_reject, alliance_break, alliance_extend, embargo_start, embargo_stop,
+                    embargo_all_start, embargo_all_stop, target_player, emoji, donate_gold, donate_troops,
+                    cancel_attack, cancel_boat, delete_unit]
+  maxStructures: {post: 4}       # los puestos de defensa solo pagan hasta 4 (reward.md §2)
+# Bonus por tribu conquistada: máximo al empezar y 0 a partir del 50 % del run (docs/specs/reward.md §9).
+conquest: {budget: 0.20, until: 0.5}
+stop:               # parada automática (ver trainer/README.md)
+  clipfrac: 0.03      # media de `window` actualizaciones
+  window: 10
+  min_updates: 5      # ~45 partidas
+  win_below: 0.3      # victorias de entrenamiento de las últimas `win_window` partidas
+  win_window: 30
+  eval_below: 0.45    # dos evaluaciones sin sesgo seguidas bajo 45 % → parar
+  eval_count: 2
+model: {}
+ppo:
+  gamma: 0.997
+  gae_lambda: 0.95
+  clip: 0.2
+  epochs: 3
+  minibatch: 2048
+  chunk: 512          # trozos de 512 muestras (~2 GB de GPU) acumulando el gradiente
+  lr: 0.00005       # constante (lr_floor 1,0); Day8 con 3e-5 se mantuvo estable pero sin mejorar
+  ent_coef: 0.0048   # con episodes 1210 arranca en ~0,0038, como Day9/Day11 (allí 0,01 con episodes 490)
+  ent_coef_final: 0.001
+  value_clip: 0.2     # por defecto (Day4)
+  vf_coef: 0.5        # por defecto (Day4)
+  lr_floor: 1.0       # sin decaimiento: se reanuda con el progreso en 289/339 y el lr caería a casi 0

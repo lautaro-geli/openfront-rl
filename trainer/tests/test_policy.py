@@ -115,6 +115,36 @@ def test_ppo_baja_la_perdida_en_un_lote_fijo(policy_and_rows):
     assert all(np.isfinite(v) for v in last.values())
 
 
+
+def test_trozos_dan_el_mismo_paso_que_el_minibatch_entero(policy_and_rows):
+    """ppo.chunk acumula el gradiente por trozos: con un solo paso, los pesos quedan iguales que sin trozos."""
+    import copy
+    _, rows, m = policy_and_rows
+    torch.manual_seed(2)
+    base = Policy(m)
+    T = 16
+    buf = RolloutBuffer(T, 1, {k: b.shape for k, b in m.obs.items()}, {k: b.shape for k, b in m.mask.items()}, m.action_dims)
+    obs = {k: np.concatenate([r[0][k] for r in rows[:T]]) for k in rows[0][0]}
+    mask = {k: np.concatenate([r[1][k] for r in rows[:T]]) for k in rows[0][1]}
+    for t in range(T):
+        buf.add_obs(t, {k: v[t : t + 1] for k, v in obs.items()}, {k: v[t : t + 1] for k, v in mask.items()})
+    ob, mk = to_tensors(obs, mask)
+    with torch.no_grad():
+        act, logp, _, val = base(ob, mk)
+    buf.action[:, 0], buf.logp[:, 0], buf.value[:, 0] = act.numpy(), logp.numpy(), val.numpy()
+    buf.reward[:, 0] = np.linspace(0, 1, T)
+    buf.compute_gae(np.zeros(1, np.float32), 0.99, 0.95, 1.0)
+    out = []
+    for chunk in (0, 5):
+        p = copy.deepcopy(base)
+        opt = torch.optim.SGD(p.parameters(), lr=0.1)
+        cfg = PPOConfig(epochs=1, minibatch=16, chunk=chunk, target_kl=10.0, max_grad_norm=1e9)
+        st = ppo_update(p, opt, buf, cfg, 0.01, np.random.default_rng(0), torch.device("cpu"))
+        out.append((p, st))
+    for (n, a), b in zip(out[0][0].named_parameters(), out[1][0].parameters()):
+        torch.testing.assert_close(a, b, atol=1e-6, rtol=1e-4, msg=n)
+    assert abs(out[0][1]["pg"] - out[1][1]["pg"]) < 1e-5
+
 def test_entrenamiento_corto_guarda_config_y_checkpoint(tmp_path):
     cfg = load_config(None, {
         "name": "humo", "seed": 3, "workers": 2, "rollout_steps": 8, "updates": 2, "checkpoint_every": 1,

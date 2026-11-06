@@ -27,6 +27,7 @@ class PPOConfig:
     ent_coef_final: float = 0.001
     target_kl: float = 0.05
     critic_lr_mult: float = 1.0  # lr del crítico = lr × este factor (cabeza de valor y, con separate_critic, su codificador)
+    chunk: int = 0  # > 0: cada minibatch se procesa en trozos de este tamaño acumulando el gradiente (mismo paso, menos memoria de GPU)
 
     @staticmethod
     def from_dict(d: dict[str, Any] | None) -> "PPOConfig":
@@ -134,30 +135,37 @@ def ppo_update(policy: Policy, opt: torch.optim.Optimizer, buf: RolloutBuffer, c
     stop = False
     for _ in range(cfg.epochs):
         for idx in buf.minibatches(cfg.minibatch, rng):
-            ob, mk, m = buf.gather(idx, device)
-            _, logp, ent, value = policy(ob, mk, action=m["action"])
-            adv = (m["adv"] - mean) / std
-            log_ratio = logp - m["logp"]
-            ratio = log_ratio.exp()
-            pg = torch.max(-adv * ratio, -adv * ratio.clamp(1 - cfg.clip, 1 + cfg.clip)).mean()
-            v_clip = m["value"] + (value - m["value"]).clamp(-cfg.value_clip, cfg.value_clip)
-            vf = 0.5 * torch.max((value - m["ret"]) ** 2, (v_clip - m["ret"]) ** 2).mean()
-            entropy = ent.mean()
-            loss = pg + cfg.vf_coef * vf - ent_coef * entropy
             opt.zero_grad(set_to_none=True)
-            loss.backward()
+            step = {k: 0.0 for k in stats}
+            size = cfg.chunk if cfg.chunk > 0 else len(idx)
+            for s0 in range(0, len(idx), size):
+                part = idx[s0 : s0 + size]
+                w = len(part) / len(idx)  # peso del trozo: el gradiente acumulado es el de la media del minibatch
+                ob, mk, m = buf.gather(part, device)
+                _, logp, ent, value = policy(ob, mk, action=m["action"])
+                adv = (m["adv"] - mean) / std
+                log_ratio = logp - m["logp"]
+                ratio = log_ratio.exp()
+                pg = torch.max(-adv * ratio, -adv * ratio.clamp(1 - cfg.clip, 1 + cfg.clip)).mean()
+                v_clip = m["value"] + (value - m["value"]).clamp(-cfg.value_clip, cfg.value_clip)
+                vf = 0.5 * torch.max((value - m["ret"]) ** 2, (v_clip - m["ret"]) ** 2).mean()
+                entropy = ent.mean()
+                loss = pg + cfg.vf_coef * vf - ent_coef * entropy
+                (loss * w).backward()
+                with torch.no_grad():
+                    var = m["ret"].var()
+                    step["loss"] += w * loss.item()
+                    step["pg"] += w * pg.item()
+                    step["vf"] += w * vf.item()
+                    step["ent"] += w * entropy.item()
+                    step["kl"] += w * ((ratio - 1) - log_ratio).mean().item()
+                    step["clipfrac"] += w * ((ratio - 1).abs() > cfg.clip).float().mean().item()
+                    step["expl_var"] += w * float(1 - ((m["ret"] - value) ** 2).mean() / (var + 1e-8))
             torch.nn.utils.clip_grad_norm_(policy.parameters(), cfg.max_grad_norm)
             opt.step()
-            with torch.no_grad():
-                kl = ((ratio - 1) - log_ratio).mean().item()
-                var = m["ret"].var()
-                stats["loss"].append(loss.item())
-                stats["pg"].append(pg.item())
-                stats["vf"].append(vf.item())
-                stats["ent"].append(entropy.item())
-                stats["kl"].append(kl)
-                stats["clipfrac"].append(((ratio - 1).abs() > cfg.clip).float().mean().item())
-                stats["expl_var"].append(float(1 - ((m["ret"] - value) ** 2).mean() / (var + 1e-8)))
+            for k, v in step.items():
+                stats[k].append(v)
+            kl = step["kl"]
             if kl > 1.5 * cfg.target_kl:
                 stop = True
                 break
