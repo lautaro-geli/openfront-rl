@@ -1,8 +1,8 @@
 {
-  "source": "runs/Day16/ckpt_000750.pt (v16_ppo_lote_10k, reanudado de Day8/latest.pt)",
-  "update": 750,
-  "episodes_done": 825,
-  "steps": 953280,
+  "source": "runs/Day18/ckpt_000760.pt (v18_ppo_lote_sin_entropia, reanudado de Day16 ckpt_000740)",
+  "update": 760,
+  "episodes_done": 986,
+  "steps": 1055680,
   "protocol_version": 3,
   "scenario": {
     "map": "Britannia",
@@ -46,7 +46,7 @@
     }
   },
   "config": {
-    "name": "ppo_v16",
+    "name": "ppo_v18",
     "seed": 0,
     "device": "auto",
     "workers": 4,
@@ -56,10 +56,10 @@
     "updates": 1000,
     "rollout_mode": "sync",
     "rollout_cap": 2,
-    "episodes": 1210,
+    "episodes": 1308,
     "checkpoint_every": 10,
     "eval": {
-      "every": 20,
+      "every": 10,
       "episodes": 40
     },
     "env": {
@@ -116,8 +116,8 @@
       "minibatch": 2048,
       "chunk": 512,
       "lr": 5e-05,
-      "ent_coef": 0.0048,
-      "ent_coef_final": 0.001,
+      "ent_coef": 0.0,
+      "ent_coef_final": 0.0,
       "value_clip": 0.2,
       "vf_coef": 0.5,
       "lr_floor": 1.0
@@ -128,12 +128,12 @@
       "min_updates": 5,
       "win_below": 0.3,
       "win_window": 30,
-      "eval_below": 0.45,
+      "eval_below": 0.6,
       "eval_count": 2
     }
   },
-  "results": "evalckpt cmp1, 80 partidas: 70/80 victorias (87,5 % ±7), eliminado 6 %, 9,2 tribus por partida. Mismas 80 partidas: ckpt_740 83,8 %, ckpt_760 81,2 %, Day13 ckpt_850 61,3 %; Day5 ckpt_620 58 % (64 partidas). Evaluación dentro del run (40 partidas, otras semillas): 750 sin evaluar; 740 90 %, 760 82,5 %.",
-  "note": "Primer modelo con lote grande (10.240 muestras por actualización, minibatch 2048, lr 5e-5). Britannia, 20 tribus + 1 nación Easy. Day16 colapsó después (act. 763–774) por sobreexpansión; este checkpoint es anterior al colapso.",
-  "exported": "2026-11-06",
+  "results": "evalckpt cmp1, 80 partidas: 76/80 victorias (95 % ±5), eliminado 0 %, 11,3 tribus por partida. Mismas 80 partidas: Day18 ckpt_780 91,2 %, ckpt_783 88,7 %; Day16 ckpt_750 (modelo anterior) 87,5 %.",
+  "note": "Receta: lote 10.240 (4×2560), minibatch 2048, lr 5e-5, ent_coef 0 (sin bonus de entropía). Britannia, 20 tribus + 1 nación Easy. Day18 no colapsó en 602 partidas.",
+  "exported": "2026-11-07",
   "size_bytes": 13507429
 }

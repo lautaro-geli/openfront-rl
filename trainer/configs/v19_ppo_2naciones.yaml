@@ -1,0 +1,68 @@
+# v19 (currículo, escalón 1 de 6): 20 tribus + 2 naciones Easy. Receta de v18 (lote 10.240, minibatch 2048, lr 5e-5, ent_coef 0),
+# 4 workers como máximo. Desde Day18 ckpt_000760 (partida 986; 95 % ±5 con 80 partidas contra 1 nación Easy; modelo nacion1-day18-u760).
+# Escalera hacia la partida online (MapPlaylist.ts:199-230: 20 naciones Medium, 400 tribus, overtime):
+#   v19 2 Easy → v20 5 Easy → v21 10 Easy → v22 20 Easy → v23 20 Easy + 100–400 tribus → v24 20 Medium + 400 tribus.
+# Pasar de escalón: ≥ 70 % con evalckpt (80 partidas, cmp1). Britannia trae 20 naciones; con un número fijo el motor elige al azar
+# ese número entre ellas en cada partida (NationCreation.ts:110-119).
+# Paradas: sin la de evaluación < 60 % (la línea base contra 2 naciones es desconocida); se para si las victorias de entrenamiento
+# caen bajo 15 % en 50 partidas o si dos evaluaciones seguidas dan < 20 % (colapso).
+# Lanzar: --resume runs/Day18/ckpt_000760.pt --run-dir runs/Day19
+name: ppo_v19
+seed: 0
+device: auto          # auto = GPU (CUDA) si existe, si no CPU; cpu o cuda para forzar
+workers: 4          # 4 de los 6 núcleos: menos carga y ruido de ventiladores durante la noche (Day7: ~80 pasos/s con 4)
+low_priority: false  # prioridad normal: el motor no cede CPU a otros procesos
+rollout_steps: 2560    # 4 workers × 2560 = 10.240 muestras por actualización (~1,2 GB de RAM)
+updates: 1000
+rollout_mode: sync    # el asíncrono no ganó velocidad (Day6, ADR 0010): la red serializada era el límite
+episodes: 1586        # total absoluto: Day18 ckpt_760 está en la partida 986, así que son 600 partidas nuevas
+checkpoint_every: 10
+eval:
+  every: 10         # cada ~100 partidas; coincide con un checkpoint (checkpoint_every 10)
+  episodes: 40      # cuota fija por worker (sin sesgo); ±15 puntos
+env:
+  map: Britannia
+  bots: 20
+  nations: 2
+  difficulty: Easy
+  decisionInterval: 10
+  maxTicks: 18000
+  grid: {h: 32, w: 64}
+  samples: 4
+  rewardTerritoryWeight: 0.40
+  rewardAttackWeight: 0.08
+  rewardEconomyWeight: 0.04
+  rewardDefenseWeight: 0.05
+  rewardMilestonesWeight: 0.06   # primera ciudad, puerto y fábrica (reward.md §2b)
+  rewardTroopsWeight: 0.05       # tropas en la zona justa, ~42 % del máximo (reward.md §2c)
+  territoryKnee: 0.15            # el primer 15 % del mapa paga el 35 % del presupuesto de territorio (reward.md §2)
+  territoryKneeShare: 0.35
+  # Sin diplomacia ni comercio: contra tribus no aportan (docs/specs/actions.md §4b).
+  disabledActions: [alliance_request, alliance_reject, alliance_break, alliance_extend, embargo_start, embargo_stop,
+                    embargo_all_start, embargo_all_stop, target_player, emoji, donate_gold, donate_troops,
+                    cancel_attack, cancel_boat, delete_unit]
+  maxStructures: {post: 4}       # los puestos de defensa solo pagan hasta 4 (reward.md §2)
+# Bonus por tribu conquistada: máximo al empezar y 0 a partir del 50 % del run (docs/specs/reward.md §9).
+conquest: {budget: 0.20, until: 0.5}
+stop:               # parada automática (ver trainer/README.md)
+  clipfrac: 0.03      # media de `window` actualizaciones
+  window: 10
+  min_updates: 5      # ~45 partidas
+  win_below: 0.15     # victorias de entrenamiento de las últimas `win_window` partidas
+  win_window: 50
+  eval_below: 0.20    # dos evaluaciones sin sesgo seguidas bajo 20 % → parar (colapso)
+  eval_count: 2
+model: {}
+ppo:
+  gamma: 0.997
+  gae_lambda: 0.95
+  clip: 0.2
+  epochs: 3
+  minibatch: 2048
+  chunk: 512          # trozos de 512 muestras (~2 GB de GPU) acumulando el gradiente
+  lr: 0.00005       # constante (lr_floor 1,0); Day8 con 3e-5 se mantuvo estable pero sin mejorar
+  ent_coef: 0.0      # bonus de entropía apagado (único cambio frente a Day16)
+  ent_coef_final: 0.0
+  value_clip: 0.2     # por defecto (Day4)
+  vf_coef: 0.5        # por defecto (Day4)
+  lr_floor: 1.0       # sin decaimiento: se reanuda con el progreso en 289/339 y el lr caería a casi 0
