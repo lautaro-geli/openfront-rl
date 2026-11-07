@@ -1,8 +1,9 @@
-# v22 (currículo, escalón 4 de 6): 20 tribus + 20 naciones Easy (todas las de Britannia, como una partida online,
+# v22 (currículo, escalón 4): 100 tribus + 20 naciones Easy (todas las naciones de Britannia, como una partida online,
 # MapPlaylist.ts:199-230 y NationCreation.ts:102). Receta de v18–v21 (lote 10.240 = 5 workers × 2048, minibatch 2048, lr 5e-5,
 # ent_coef 0). Desde Day21 latest (act. 857, partida 2197; 90 % ±7 con 80 partidas contra 10 naciones Easy; modelo
 # nacion10-day21-u857).
-# Escalera: v19 2 Easy → (v20 5 Easy, salteado) → v21 10 Easy → v22 20 Easy → v23 20 Easy + 100–400 tribus → v24 20 Medium + 400.
+# Escalera: v19 2 Easy → (v20 5 Easy, salteado) → v21 10 Easy → v22 20 Easy + 100 tribus (el usuario juntó naciones y tribus en un
+# escalón, 7 nov) → v23 20 Easy + 400 tribus → v24 20 Medium + 400 tribus. Si empeora, no se sabe si fue por naciones o por tribus.
 # Pasar de escalón: ≥ 70 % con evalckpt (80 partidas, cmp1).
 # Vigilar: en Day18, Day19 y Day21 el EV del crítico bajó hacia el final (0,85 → 0,45) y la entropía subió (0,78 → 0,91).
 # Paradas por colapso: victorias de entrenamiento < 15 % en 50 partidas o dos evaluaciones seguidas < 20 %.
@@ -22,7 +23,7 @@ eval:
   episodes: 40      # cuota fija por worker (sin sesgo); ±15 puntos
 env:
   map: Britannia
-  bots: 20
+  bots: 100
   nations: 20
   difficulty: Easy
   decisionInterval: 10
