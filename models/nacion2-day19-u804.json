@@ -1,0 +1,139 @@
+{
+  "source": "runs/Day19/latest.pt, act. 804 (v19_ppo_2naciones, reanudado de Day18 ckpt_000760)",
+  "update": 804,
+  "episodes_done": 1590,
+  "steps": 1506240,
+  "protocol_version": 3,
+  "scenario": {
+    "map": "Britannia",
+    "bots": 20,
+    "nations": 2,
+    "difficulty": "Easy",
+    "decisionInterval": 10,
+    "maxTicks": 18000,
+    "grid": {
+      "h": 32,
+      "w": 64
+    },
+    "samples": 4,
+    "rewardTerritoryWeight": 0.4,
+    "rewardAttackWeight": 0.08,
+    "rewardEconomyWeight": 0.04,
+    "rewardDefenseWeight": 0.05,
+    "rewardMilestonesWeight": 0.06,
+    "rewardTroopsWeight": 0.05,
+    "territoryKnee": 0.15,
+    "territoryKneeShare": 0.35,
+    "disabledActions": [
+      "alliance_request",
+      "alliance_reject",
+      "alliance_break",
+      "alliance_extend",
+      "embargo_start",
+      "embargo_stop",
+      "embargo_all_start",
+      "embargo_all_stop",
+      "target_player",
+      "emoji",
+      "donate_gold",
+      "donate_troops",
+      "cancel_attack",
+      "cancel_boat",
+      "delete_unit"
+    ],
+    "maxStructures": {
+      "post": 4
+    }
+  },
+  "config": {
+    "name": "ppo_v19",
+    "seed": 0,
+    "device": "auto",
+    "workers": 4,
+    "torch_threads": null,
+    "low_priority": false,
+    "rollout_steps": 2560,
+    "updates": 1000,
+    "rollout_mode": "sync",
+    "rollout_cap": 2,
+    "episodes": 1586,
+    "checkpoint_every": 10,
+    "eval": {
+      "every": 10,
+      "episodes": 40
+    },
+    "env": {
+      "map": "Britannia",
+      "bots": 20,
+      "nations": 2,
+      "difficulty": "Easy",
+      "decisionInterval": 10,
+      "maxTicks": 18000,
+      "grid": {
+        "h": 32,
+        "w": 64
+      },
+      "samples": 4,
+      "rewardTerritoryWeight": 0.4,
+      "rewardAttackWeight": 0.08,
+      "rewardEconomyWeight": 0.04,
+      "rewardDefenseWeight": 0.05,
+      "rewardMilestonesWeight": 0.06,
+      "rewardTroopsWeight": 0.05,
+      "territoryKnee": 0.15,
+      "territoryKneeShare": 0.35,
+      "disabledActions": [
+        "alliance_request",
+        "alliance_reject",
+        "alliance_break",
+        "alliance_extend",
+        "embargo_start",
+        "embargo_stop",
+        "embargo_all_start",
+        "embargo_all_stop",
+        "target_player",
+        "emoji",
+        "donate_gold",
+        "donate_troops",
+        "cancel_attack",
+        "cancel_boat",
+        "delete_unit"
+      ],
+      "maxStructures": {
+        "post": 4
+      }
+    },
+    "conquest": {
+      "budget": 0.2,
+      "until": 0.5
+    },
+    "model": {},
+    "ppo": {
+      "gamma": 0.997,
+      "gae_lambda": 0.95,
+      "clip": 0.2,
+      "epochs": 3,
+      "minibatch": 2048,
+      "chunk": 512,
+      "lr": 5e-05,
+      "ent_coef": 0.0,
+      "ent_coef_final": 0.0,
+      "value_clip": 0.2,
+      "vf_coef": 0.5,
+      "lr_floor": 1.0
+    },
+    "stop": {
+      "clipfrac": 0.03,
+      "window": 10,
+      "min_updates": 5,
+      "win_below": 0.15,
+      "win_window": 50,
+      "eval_below": 0.2,
+      "eval_count": 2
+    }
+  },
+  "results": "evalckpt cmp1, 80 partidas, 4 workers, 20 tribus + 2 naciones Easy: 77/80 victorias (96,3 % ±4), eliminado 0 %, 10,4 tribus y 0,36 naciones conquistadas por partida. Línea base (Day18 ckpt_760 sin entrenar en este escenario, 40 partidas): 80 %.",
+  "note": "Escalón 1 del currículo hacia la partida online. Receta: lote 10.240 (4×2560), minibatch 2048, lr 5e-5, ent_coef 0. 600 partidas sin colapso.",
+  "exported": "2026-11-07",
+  "size_bytes": 13507429
+}
