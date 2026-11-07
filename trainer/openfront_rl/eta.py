@@ -66,7 +66,7 @@ def estimate(rows: list[dict[str, Any]], status: dict[str, Any], cfg: dict[str, 
         eval_src = "estimado con la duración de las partidas de entrenamiento (sin evaluaciones medidas)"
     u = int(status.get("update", rows[-1]["update"]))
     left_eps = max(0.0, float(status.get("episodes_total") or 0) - float(status.get("episodes_done") or 0))
-    left_upd = math.ceil(left_eps / gpu) if left_eps else 0  # noqa: RUF046
+    left_upd = math.ceil(left_eps / gpu) if left_eps else 0
     n_evals = sum(1 for k in range(u + 1, u + left_upd + 1) if every and k % every == 0)
     fw = final_workers or workers
     out = {}
