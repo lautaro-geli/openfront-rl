@@ -81,7 +81,7 @@ def estimate(rows: list[dict[str, Any]], status: dict[str, Any], cfg: dict[str, 
 
 
 def fmt(s: float) -> str:
-    m = int(round(s / 60))
+    m = round(s / 60)
     return f"{m // 60} h {m % 60:02d} min" if m >= 60 else f"{m} min"
 
 
