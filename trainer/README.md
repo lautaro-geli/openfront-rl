@@ -62,6 +62,9 @@ Los archivos de `configs/` llevan prefijo de versión (`v1_ppo_base`, `v2_ppo_na
 ## Crítico separado
 `model: {separate_critic: true}` da al crítico su propio codificador (`enc_v`), de modo que el gradiente del valor no toca la política. Cuesta una segunda pasada del codificador por paso (más tiempo de red). Al reanudar desde un checkpoint con codificador compartido, `enc_v` arranca copiando `enc` y el optimizador se reinicia. `ppo.gae_lambda` también es configurable (v10 usa 0,97).
 
+## Cuánto falta (`eta`)
+`python -m openfront_rl.eta --run runs/Day19 --final-eval 80` estima el tiempo restante de un run con las tasas medidas en el propio run: duración de una actualización (mediana de las últimas 15 sin evaluación), partidas por actualización (cambian con las victorias) y costo de cada evaluación dentro del run (lo que tardó de más la actualización siguiente). Da un rango (percentiles 25–75). Con menos de 3 evaluaciones medidas, mezcla su costo con la duración de las partidas de entrenamiento (la primera suele ser más lenta). Contrastado con Day18: error de +20 min sobre 2 h al principio del run (las partidas se acortan al ganar más) y de ±1 min a partir de la mitad.
+
 ## Diagnóstico: señal del gradiente (`gradnoise`)
 `python -m openfront_rl.gradnoise --ckpt runs/Day8/latest.pt --batches 40 --workers 5` juega 40 lotes con la política congelada (como el entrenamiento: `rollout_steps` × workers muestras, GAE y ventajas normalizadas por lote) y calcula el gradiente de la pérdida de política de cada lote. Imprime:
 - `coseno_medio`: coseno medio entre los gradientes de lotes distintos (≈ 0: cada lote apunta a otro lado, es ruido).
