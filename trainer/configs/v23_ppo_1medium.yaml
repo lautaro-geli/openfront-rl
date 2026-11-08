@@ -1,0 +1,69 @@
+# v23 (currículo hacia Medium, escalón 1): 100 tribus + 1 nación **Medium**. Receta de v18–v22 (lote 10.240 = 5 workers × 2048,
+# minibatch 2048, lr 5e-5, ent_coef 0). Desde Day22 latest (act. 908, partida 2808; 85 % contra 20 naciones Easy + 100 tribus;
+# modelo nacion20-day22-u908).
+# Diagnóstico del 8 nov (Day22 sin entrenar, 40 partidas): 20 Easy + 400 tribus 85 %; 2 Medium + 100 tribus 17,5 % (elim. 35 %);
+# 20 Medium + 100 tribus 0 % (elim. 87,5 %). El problema es la dificultad Medium, no la cantidad de jugadores.
+# Escalera: v23 1 Medium → v24 2 Medium → v25 5 Medium → v26 10 Medium → v27 20 Medium + 400 tribus (= partida online).
+# Pasar de escalón: ≥ 70 % con evalckpt (80 partidas, cmp1).
+# Paradas ajustadas a una línea base baja: solo cortan ante un colapso real (casi 0 % de victorias), no por empezar bajo.
+# Antecedente: Day6 (1 nación Medium, receta vieja de lote chico y bonus de entropía) colapsó a 3 %.
+# Lanzar: --resume runs/Day22/latest.pt --run-dir runs/Day23
+name: ppo_v23
+seed: 0
+device: auto          # auto = GPU (CUDA) si existe, si no CPU; cpu o cuda para forzar
+workers: 5          # 5 de los 6 núcleos (pedido del usuario, 7 nov)
+low_priority: false  # prioridad normal: el motor no cede CPU a otros procesos
+rollout_steps: 2048    # 5 workers × 2048 = 10.240 muestras por actualización (~1,2 GB de RAM), igual que v18/v19
+updates: 1000
+rollout_mode: sync    # el asíncrono no ganó velocidad (Day6, ADR 0010): la red serializada era el límite
+episodes: 3408        # total absoluto: Day22 latest está en la partida 2808, así que son 600 partidas nuevas
+checkpoint_every: 10
+eval:
+  every: 10         # cada ~100 partidas; coincide con un checkpoint (checkpoint_every 10)
+  episodes: 40      # cuota fija por worker (sin sesgo); ±15 puntos
+env:
+  map: Britannia
+  bots: 100
+  nations: 1
+  difficulty: Medium
+  decisionInterval: 10
+  maxTicks: 18000
+  grid: {h: 32, w: 64}
+  samples: 4
+  rewardTerritoryWeight: 0.40
+  rewardAttackWeight: 0.08
+  rewardEconomyWeight: 0.04
+  rewardDefenseWeight: 0.05
+  rewardMilestonesWeight: 0.06   # primera ciudad, puerto y fábrica (reward.md §2b)
+  rewardTroopsWeight: 0.05       # tropas en la zona justa, ~42 % del máximo (reward.md §2c)
+  territoryKnee: 0.15            # el primer 15 % del mapa paga el 35 % del presupuesto de territorio (reward.md §2)
+  territoryKneeShare: 0.35
+  # Sin diplomacia ni comercio: contra tribus no aportan (docs/specs/actions.md §4b).
+  disabledActions: [alliance_request, alliance_reject, alliance_break, alliance_extend, embargo_start, embargo_stop,
+                    embargo_all_start, embargo_all_stop, target_player, emoji, donate_gold, donate_troops,
+                    cancel_attack, cancel_boat, delete_unit]
+  maxStructures: {post: 4}       # los puestos de defensa solo pagan hasta 4 (reward.md §2)
+# Bonus por tribu conquistada: máximo al empezar y 0 a partir del 50 % del run (docs/specs/reward.md §9).
+conquest: {budget: 0.20, until: 0.5}
+stop:               # parada automática (ver trainer/README.md)
+  clipfrac: 0.03      # media de `window` actualizaciones
+  window: 10
+  min_updates: 5      # ~45 partidas
+  win_below: 0.02     # victorias de entrenamiento de las últimas `win_window` partidas: solo un colapso real (0–1 de 60)
+  win_window: 60
+  eval_below: 0.03    # dos evaluaciones sin sesgo seguidas con 0–1 victorias de 40 → parar (colapso)
+  eval_count: 2
+model: {}
+ppo:
+  gamma: 0.997
+  gae_lambda: 0.95
+  clip: 0.2
+  epochs: 3
+  minibatch: 2048
+  chunk: 512          # trozos de 512 muestras (~2 GB de GPU) acumulando el gradiente
+  lr: 0.00005       # constante (lr_floor 1,0); Day8 con 3e-5 se mantuvo estable pero sin mejorar
+  ent_coef: 0.0      # bonus de entropía apagado (único cambio frente a Day16)
+  ent_coef_final: 0.0
+  value_clip: 0.2     # por defecto (Day4)
+  vf_coef: 0.5        # por defecto (Day4)
+  lr_floor: 1.0       # sin decaimiento: se reanuda con el progreso en 289/339 y el lr caería a casi 0
