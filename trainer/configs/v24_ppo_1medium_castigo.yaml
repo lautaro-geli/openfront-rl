@@ -1,0 +1,71 @@
+# v24 (repetición de v23 con un solo cambio): 100 tribus + 1 nación Medium, desde Day22 latest (el mismo punto de partida que Day23),
+# con `rewardOtherWinPenalty: 1.0` (docs/specs/reward.md v2.3 §7): si la partida la gana otro jugador y el agente sigue vivo,
+# `terminal` vale −1 en vez de 0.
+# Diagnóstico de Day23 (8 nov, 606 partidas): la nación Medium ganó ~50 % de las partidas y eso no costaba nada (terminal 0, igual que
+# agotar el tiempo); el agente casi no la atacó (8 órdenes de ataque por partida contra no-tribus, frente a 44–57 en Day21–Day22),
+# nunca la conquistó y las victorias bajaron (línea base 50 % → final 36 %). Medium da a la nación 18.750 tropas iniciales contra
+# 12.500 en Easy (vendor/openfront/packages/engine/src/configuration/EngineConfig.ts:653-656).
+# Predicción si la causa es la recompensa: órdenes de ataque contra no-tribus > 25 por partida, partidas ganadas por otro < 35 %,
+# y evaluación final ≥ 60 % (80 partidas). Si no se cumple, la falta de castigo no era la causa.
+# Control: Day23 (misma config salvo este campo). Un solo run y una semilla: diferencias de < ~15 puntos no son concluyentes.
+# Lanzar: --resume runs/Day22/latest.pt --run-dir runs/Day24
+name: ppo_v24
+seed: 0
+device: auto          # auto = GPU (CUDA) si existe, si no CPU; cpu o cuda para forzar
+workers: 5          # 5 de los 6 núcleos (pedido del usuario, 7 nov)
+low_priority: false  # prioridad normal: el motor no cede CPU a otros procesos
+rollout_steps: 2048    # 5 workers × 2048 = 10.240 muestras por actualización (~1,2 GB de RAM), igual que v18/v19
+updates: 1000
+rollout_mode: sync    # el asíncrono no ganó velocidad (Day6, ADR 0010): la red serializada era el límite
+episodes: 3408        # total absoluto: Day22 latest está en la partida 2808, así que son 600 partidas nuevas
+checkpoint_every: 10
+eval:
+  every: 10         # cada ~100 partidas; coincide con un checkpoint (checkpoint_every 10)
+  episodes: 40      # cuota fija por worker (sin sesgo); ±15 puntos
+env:
+  map: Britannia
+  bots: 100
+  nations: 1
+  difficulty: Medium
+  decisionInterval: 10
+  maxTicks: 18000
+  grid: {h: 32, w: 64}
+  samples: 4
+  rewardTerritoryWeight: 0.40
+  rewardAttackWeight: 0.08
+  rewardEconomyWeight: 0.04
+  rewardDefenseWeight: 0.05
+  rewardMilestonesWeight: 0.06   # primera ciudad, puerto y fábrica (reward.md §2b)
+  rewardTroopsWeight: 0.05       # tropas en la zona justa, ~42 % del máximo (reward.md §2c)
+  rewardOtherWinPenalty: 1.0     # v2.3: −1 si la partida la gana otro jugador con el agente vivo (antes 0; reward.md §7)
+  territoryKnee: 0.15            # el primer 15 % del mapa paga el 35 % del presupuesto de territorio (reward.md §2)
+  territoryKneeShare: 0.35
+  # Sin diplomacia ni comercio: contra tribus no aportan (docs/specs/actions.md §4b).
+  disabledActions: [alliance_request, alliance_reject, alliance_break, alliance_extend, embargo_start, embargo_stop,
+                    embargo_all_start, embargo_all_stop, target_player, emoji, donate_gold, donate_troops,
+                    cancel_attack, cancel_boat, delete_unit]
+  maxStructures: {post: 4}       # los puestos de defensa solo pagan hasta 4 (reward.md §2)
+# Bonus por tribu conquistada: máximo al empezar y 0 a partir del 50 % del run (docs/specs/reward.md §9).
+conquest: {budget: 0.20, until: 0.5}
+stop:               # parada automática (ver trainer/README.md)
+  clipfrac: 0.03      # media de `window` actualizaciones
+  window: 10
+  min_updates: 5      # ~45 partidas
+  win_below: 0.02     # victorias de entrenamiento de las últimas `win_window` partidas: solo un colapso real (0–1 de 60)
+  win_window: 60
+  eval_below: 0.03    # dos evaluaciones sin sesgo seguidas con 0–1 victorias de 40 → parar (colapso)
+  eval_count: 2
+model: {}
+ppo:
+  gamma: 0.997
+  gae_lambda: 0.95
+  clip: 0.2
+  epochs: 3
+  minibatch: 2048
+  chunk: 512          # trozos de 512 muestras (~2 GB de GPU) acumulando el gradiente
+  lr: 0.00005       # constante (lr_floor 1,0); Day8 con 3e-5 se mantuvo estable pero sin mejorar
+  ent_coef: 0.0      # bonus de entropía apagado (único cambio frente a Day16)
+  ent_coef_final: 0.0
+  value_clip: 0.2     # por defecto (Day4)
+  vf_coef: 0.5        # por defecto (Day4)
+  lr_floor: 1.0       # sin decaimiento: se reanuda con el progreso en 289/339 y el lr caería a casi 0

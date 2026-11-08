@@ -1,4 +1,4 @@
-# Spec: recompensa (v2.2)
+# Spec: recompensa (v2.3)
 
 > Estado: **aprobada para implementar**. Sustituye a la v1. Se calcula en `bridge/src/reward.ts` (tiene acceso al motor) y viaja por el protocolo como **componentes separados** (`docs/specs/protocol.md` §4). La recompensa total es su suma.
 
@@ -13,7 +13,7 @@ Es shaping basado en potencial (Ng et al., 1999): se cobra al mejorar, se devuel
 
 | Orden | Categoría | Presupuesto `B_k` (configuración de entrenamiento) | Potencial `Φ_k` |
 |---|---|---|---|
-| 1 | `terminal` | +1 al ganar, −1 al ser eliminado, 0 si no | — |
+| 1 | `terminal` | +1 al ganar, −1 al ser eliminado, −`rewardOtherWinPenalty` si la partida la gana otro jugador (v2.3, por defecto 0), 0 si no | — |
 | 2 | `territory` | 0.40 | `min(frac / 0.8, 1)` |
 | 3 | `attack` | 0.08 | 0.8 · `Φ_tropas` + 0.2 · `Φ_silos` |
 | 4 | `economy` | 0.04 | `Φ_ingreso` |
@@ -87,12 +87,15 @@ Cada componente viaja por separado y se registra por episodio (suma) y por paso 
 ## 7. Victoria con varios jugadores y alianzas
 `terminal = +1` solo si `game.getWinner() === me`. Un aliado ganador no cuenta.
 
+**Victoria de otro jugador (v2.3).** Hasta la v2.2, si la partida la ganaba otro jugador (una nación, una tribu u otro agente) y el agente seguía vivo, `terminal` valía 0, lo mismo que agotar el tiempo: perder así no costaba nada más allá del territorio. Con naciones Easy casi no pasaba; contra una nación Medium pasó en ~50 % de las partidas de Day23, que además casi no atacó a la nación (8 órdenes de ataque por partida contra no-tribus, frente a 44–57 en Day21–Day22) y nunca la conquistó. El campo `rewardOtherWinPenalty` (≥ 0, por defecto 0 para no cambiar los runs anteriores) da `terminal = −rewardOtherWinPenalty` en el paso en que termina la partida con `game.getWinner()` distinto del agente, si el agente no estaba eliminado. Con 1 la derrota por victoria ajena cuesta lo mismo que ser eliminado. Se calcula en `terminalReward` (`bridge/src/reward.ts`).
+
 ## 8. Tests
 - Con los pesos por defecto del puente la recompensa total coincide con la de la v0 (`territory + terminal`).
 - Con semilla fija, las sumas de cada componente son reproducibles; activar el shaping no cambia el hash del motor.
 - Cada potencial está en [0, 1]; `Φ_seguridad = 1` sin vecinos hostiles.
 - El valor acumulado de cada categoría nunca supera su presupuesto, y la suma de los presupuestos activos es menor que 1.
 - La suma de los componentes que llegan por el protocolo es igual a la recompensa total.
+- `terminalReward`: +1 al ganar, −1 al ser eliminado, −`rewardOtherWinPenalty` si gana otro, 0 si no; nada después de estar eliminado (v2.3).
 
 ## 9. Bonus por tribus conquistadas (currículo, lo aplica el trainer)
 Al empezar, la mayor ganancia está en conquistar tribus (no tienen economía ni defienden). Para empujar al agente a atacarlas hay un bonus que **decae con el progreso del entrenamiento** hasta desaparecer:

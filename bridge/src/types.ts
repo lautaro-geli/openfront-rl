@@ -23,6 +23,8 @@ export interface EnvConfig {
   rewardDefenseWeight: number;
   rewardMilestonesWeight: number;
   rewardTroopsWeight: number;
+  /** Castigo terminal (≥ 0) si la partida la gana otro jugador y el agente sigue vivo (docs/specs/reward.md §7, v2.3). 0 = como antes. */
+  rewardOtherWinPenalty: number;
   /** Curva de territorio por tramos (spec §2): hasta `territoryKnee` se paga `territoryKneeShare` del presupuesto. 0 = lineal. */
   territoryKnee: number;
   territoryKneeShare: number;

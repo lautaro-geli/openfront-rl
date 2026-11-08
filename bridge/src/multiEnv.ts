@@ -61,6 +61,7 @@ export const DEFAULT_CONFIG: EnvConfig = {
   rewardDefenseWeight: 0,
   rewardMilestonesWeight: 0,
   rewardTroopsWeight: 0,
+  rewardOtherWinPenalty: 0,
   territoryKnee: 0,
   territoryKneeShare: 0.5,
   agents: 1,
@@ -285,12 +286,13 @@ export class MultiAgentEnv {
       const wasEliminated = a.eliminated;
       const eliminatedNow = afterSpawn && !a.me.isAlive();
       const won = ep.sawWin && winner === a.me;
+      const otherWon = ep.sawWin && winner !== null && winner !== a.me;
       for (const t of ep.built[i]) countBuilt(events[i], t);
       for (const [by, who] of ep.conquests) {
         if (by === a.me) countConquest(events[i], who);
         else if (who === a.me) countConqueredBy(events[i], by);
       }
-      const parts = computeRewardParts(game, a.me, a.rs, cfg, { afterSpawn, wasEliminated, eliminatedNow, won, landTiles });
+      const parts = computeRewardParts(game, a.me, a.rs, cfg, { afterSpawn, wasEliminated, eliminatedNow, won, otherWon, landTiles });
       a.eliminated = a.eliminated || eliminatedNow;
       reward.push(sumParts(parts));
       terminatedFlags.push(a.eliminated || ep.sawWin);

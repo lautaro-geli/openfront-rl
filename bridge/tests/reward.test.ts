@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { MultiAgentEnv } from "../src/multiEnv";
 import { CELL_KINDS } from "../src/features";
 import { HeuristicPolicy } from "../src/heuristicPolicy";
-import { REWARD_PARTS, securityPotential, territoryPotential, troopBand } from "../src/reward";
+import { REWARD_PARTS, securityPotential, terminalReward, territoryPotential, troopBand } from "../src/reward";
 import { RandomPolicy } from "../src/randomPolicy";
 import type { EnvConfig } from "../src/types";
 
@@ -134,4 +134,15 @@ describe("recompensa por componentes", () => {
     expect(ordered).toBeGreaterThan(0);
     expect(total).toBeCloseTo(0.02, 9);
   }, 120000);
+
+  it("terminal: +1 al ganar, −1 eliminado, −castigo si gana otro y 0 después de eliminado (v2.3)", () => {
+    const base = { wasEliminated: false, won: false, eliminatedNow: false, otherWon: false };
+    expect(terminalReward({ ...base, won: true }, 1)).toBe(1);
+    expect(terminalReward({ ...base, eliminatedNow: true }, 1)).toBe(-1);
+    expect(terminalReward({ ...base, otherWon: true }, 1)).toBe(-1);
+    expect(terminalReward({ ...base, otherWon: true }, 0)).toBe(0);
+    expect(terminalReward({ ...base, otherWon: true }, 0.5)).toBe(-0.5);
+    expect(terminalReward({ ...base, wasEliminated: true, otherWon: true }, 1)).toBe(0);
+    expect(terminalReward(base, 1)).toBe(0);
+  });
 });

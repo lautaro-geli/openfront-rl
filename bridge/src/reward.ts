@@ -102,7 +102,7 @@ export function computeRewardParts(
   me: Player,
   st: RewardState,
   cfg: EnvConfig,
-  f: { afterSpawn: boolean; wasEliminated: boolean; eliminatedNow: boolean; won: boolean; landTiles: number },
+  f: { afterSpawn: boolean; wasEliminated: boolean; eliminatedNow: boolean; won: boolean; otherWon?: boolean; landTiles: number },
 ): RewardParts {
   const parts = zeroParts();
   const alive = f.afterSpawn && !f.wasEliminated;
@@ -157,8 +157,22 @@ export function computeRewardParts(
     parts.troops = (cfg.rewardTroopsWeight * troopBand(me.troops() / Math.max(1, game.config().maxTroops(me)))) / steps;
   }
 
-  parts.terminal = f.wasEliminated ? 0 : f.won ? 1 : f.eliminatedNow ? -1 : 0;
+  parts.terminal = terminalReward(f, cfg.rewardOtherWinPenalty ?? 0);
   return parts;
+}
+
+/**
+ * Término terminal (docs/specs/reward.md §1 y §7): +1 al ganar, −1 al ser eliminado, −`otherWinPenalty` si la partida la gana
+ * otro jugador con el agente vivo, 0 si no. Nada después de estar eliminado.
+ */
+export function terminalReward(
+  f: { wasEliminated: boolean; won: boolean; eliminatedNow: boolean; otherWon?: boolean },
+  otherWinPenalty: number,
+): number {
+  if (f.wasEliminated) return 0;
+  if (f.won) return 1;
+  if (f.eliminatedNow) return -1;
+  return f.otherWon && otherWinPenalty > 0 ? -otherWinPenalty : 0;
 }
 
 export const sumParts = (p: RewardParts): number => REWARD_PARTS.reduce((s, k) => s + p[k], 0);
