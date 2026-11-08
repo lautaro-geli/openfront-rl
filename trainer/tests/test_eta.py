@@ -29,3 +29,10 @@ def test_sin_evaluaciones_medidas_usa_las_partidas_de_entrenamiento():
     rows = _rows(5, 120.0, 10, 1000, 0.0, 40)
     r = estimate(rows, {"update": 5, "episodes_done": 50, "episodes_total": 150}, {"workers": 4, "eval": {"every": 10, "episodes": 40}})
     assert "sin evaluaciones medidas" in r["eval_fuente"] and r["evaluaciones_restantes"] == 1
+
+
+def test_al_principio_usa_los_tiempos_de_cada_fila():
+    rows = [{"update": 1, "time": 190.0, "episodes": 12, "t_rollout": 170.0, "t_update": 13.0},
+            {"update": 2, "time": 380.0, "episodes": 12, "t_rollout": 172.0, "t_update": 12.0, "eval_won": 0.5, "eval_episodes": 40}]
+    r = estimate(rows, {"update": 2, "episodes_done": 24, "episodes_total": 120}, {"workers": 5, "eval": {"every": 10, "episodes": 40}})
+    assert 180 <= r["actualizacion_s"][1] <= 200 and r["actualizaciones_restantes"] == 8

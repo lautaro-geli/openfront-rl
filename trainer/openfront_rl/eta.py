@@ -46,8 +46,13 @@ def estimate(rows: list[dict[str, Any]], status: dict[str, Any], cfg: dict[str, 
         elif "eval_won" not in b:
             dts.append(dt)
     dts = dts[-window:]
+    if len(dts) < 3:
+        # Al principio del run casi no hay pares sin evaluación: se completa con lo que la propia fila mide de rollout y PPO
+        # (`t_rollout` + `t_update`), con un 8 % más por guardar checkpoints y métricas (medido en Day18: 142 s contra ~131 s).
+        dts = dts + [1.08 * (float(r["t_rollout"]) + float(r["t_update"])) for r in rows[-window:]
+                     if "eval_won" not in r and "t_rollout" in r and "t_update" in r]
     if not dts:
-        raise ValueError("hacen falta al menos dos actualizaciones sin evaluación")
+        raise ValueError("todavía no hay ninguna actualización medida")
     upd = np.percentile(dts, [25, 50, 75])
     eps = [float(r.get("episodes", 0)) for r in rows[-window:]]
     gpu = max(0.5, float(np.mean(eps)))
